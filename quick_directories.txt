@@ -1,0 +1,18 @@
+Startup
+cmd/startup/startup.go
+
+Send expression
+curl http://127.0.0.1:8080/calculator/sendexpression
+
+Shutdown
+cmd/shutdown/shutdown.go
+
+Orchestrator
+backend/cmd/orchestrator/orchestrator.go
+
+Agent
+backend/cmd/orchestrator/agent.go
+
+Frontend...
+frontend/
+
