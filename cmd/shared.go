@@ -6,8 +6,11 @@ import (
 	"log"
 	"os"
 	"io"
+	"bufio"
+	"time"
 
 	"github.com/jackc/pgx"
+	// "golang.org/x/text/encoding/charmap"
 )
 
 var (
@@ -39,28 +42,18 @@ func GetDBSTate() Db_info { // Возвращает JSON структуру из
 	return db_info
 }
 
-func GetDebugLogger() *log.Logger {
-	switch vars.LoggerOutputDebug {
-	case 0:
-		return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
-	case 1:
-		f, err := os.Create("backend/logs/debug.txt")
-		if err != nil {
-			log.Println("Не смогли открыть файл для логгера, их логи записаны не будут.")
-			f = nil
+var flushInterval = 1 * time.Second // Adjust the flush interval as needed
+
+func autoFlushBuffer(writer *bufio.Writer) {
+    ticker := time.NewTicker(flushInterval)
+    defer ticker.Stop()
+
+    for {
+        <-ticker.C
+		if err := writer.Flush(); err != nil {
+			log.Printf("Error flushing buffer: %v\n", err)
 		}
-		OpenFiles = append(OpenFiles, f)
-		return log.New(f, "", vars.LoggerFlagsDebug)
-	case 2:
-		f, err := os.Create("backend/logs/debug.txt")
-		if err != nil {
-			log.Println("Не смогли открыть файл для логгера, будет использоваться только Stdout.")
-			f = nil
-		}
-		OpenFiles = append(OpenFiles, f)
-		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsDebug)
-	}
-	return log.Default()
+    }
 }
 
 func GetErrLogger() *log.Logger {
@@ -85,6 +78,32 @@ func GetErrLogger() *log.Logger {
 		OpenFiles = append(OpenFiles, f)
 		f.WriteString("\nНОВАЯ СЕССИЯ\n")
 		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsError)
+	}
+	return log.Default()
+}
+
+func GetDebugLogger() *log.Logger {
+	switch vars.LoggerOutputDebug {
+	case 0:
+		return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
+	case 1:
+		f, err := os.OpenFile("backend/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+        if err != nil {
+            log.Println("Failed to open file for logger, logging to stdout only.")
+            return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
+        }
+        OpenFiles = append(OpenFiles, f)
+        writer := bufio.NewWriter(f)
+        go autoFlushBuffer(writer)
+        return log.New(writer, "", vars.LoggerFlagsDebug)
+	case 2:
+		f, err := os.Create("backend/logs/debug.txt")
+		if err != nil {
+			log.Println("Не смогли открыть файл для логгера, будет использоваться только Stdout.")
+			f = nil
+		}
+		OpenFiles = append(OpenFiles, f)
+		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsDebug)
 	}
 	return log.Default()
 }

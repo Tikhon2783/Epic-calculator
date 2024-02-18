@@ -132,13 +132,15 @@ func validityMiddleware(next http.Handler) http.Handler {
 
 		// Проверяем, принято ли уже было выражение с таким же ключом идемпотентности
 		var exists bool
-		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE id=$1)").Scan(&exists)
+		logger.Println("Hello postgresql")
+		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1)", id).Scan(&exists)
 		if err != nil {
 			logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 			loggerErr.Println("Оркестратор: ошибка проверки ключа в базе данных.")
 			http.Error(w, "Ошибка проверки ключа в базе данных", http.StatusInternalServerError)
 			return
 		}
+		logger.Println("Bye postgresql")
 		if exists {
 			logger.Println("Выражение с повторяющимся ключем идемпотентности, возвращаем код 200.")
 			fmt.Fprint(w, http.StatusText(200), "Выражение уже было принято к обработке")
@@ -175,9 +177,9 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec("orchestratorPut", id, exp)
 	if err != nil {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-		loggerErr.Println("Оркестратор: ошибка записи выражения в таблицу с выражениями.")
+		loggerErr.Printf("Оркестратор: ошибка записи выражения в таблицу с выражениями: %s.", err)
 		http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
-		mu.Unlock()
+		// mu.Unlock()
 		return
 	}
 
@@ -188,27 +190,43 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logger.Println("Ищем свободного агента...")
-	mu.RLock()
+	// mu.RLock()
 	// Ищем свободного агента
 	for i := 1; i < vars.N_agents+1; i++ {
 		if manager.Agents[i] == 1 {
 			logger.Println(i, "агент свободен.")
-			err = giveTaskToAgent(i, id)
-			mu.RUnlock()
+			_, err = db.Exec(
+				`UPDATE requests
+					SET agent_proccess = $2
+					WHERE request_id = $1;`,
+					id,
+					i,
+				)
+			logger.Println("Hello again!")
+			if err != nil {
+				fmt.Println("Bye world!")
+			}
+			logger.Printf("Отдаем выражение агенту %v.", i)
+			manager.Agents[i] = 2
+			select {
+			case manager.TaskInformer[i] <- id:
+				logger.Printf("Выражение отдано агенту %v.", i)
+			default:
+				logger.Printf("Не смогли отдать выражение агенту %v.", i)
+			}
+			// mu.RUnlock()
 			if err != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями.")
 				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
 				return
 			}
-			manager.Agents[i] = 2
-			manager.TaskInformer[i] <- id
 			logger.Printf("Выражение отдано агенту %v, возвращем код 200.", i)
 			fmt.Fprint(w, http.StatusText(200), "Выражение принято на обработку агентом")
 			return
 		}
 	}
-	mu.RUnlock()
+	// mu.RUnlock()
 
 	logger.Println("Все агенты заняты, кладем выражение в очередь.")
 	manager.TaskIds.Append(id)
@@ -231,6 +249,10 @@ func Launch() {
 	logger.Println("Подключился оркестратор.")
 	fmt.Println("Оркестратор передаёт привет :)")
 	db = shared.Db
+	// conn, err := db.Acquire()
+	// fmt.Println(conn, err)
+	// conn.Close()
+	// logger.Println("Hello!")
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
@@ -238,7 +260,11 @@ func Launch() {
 		VALUES ($1, $2);`,
 	)
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 	_, err = db.Prepare( // Запись результата в таблицу с выражениями
 		"orchestratorAssign",
@@ -247,7 +273,11 @@ func Launch() {
 			WHERE request_id = $1;`,
 	)
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 	_, err = db.Prepare( // Получение результата из таблицы с процессами (агентами)
 		"orchestratorReceive",
@@ -255,7 +285,11 @@ func Launch() {
 			WHERE proccess_id = $1;`,
 	)
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 	_, err = db.Prepare( // Запись результата в таблицу с выражениями
 		"orchestratorUpdate",
@@ -264,7 +298,11 @@ func Launch() {
 			WHERE request_id = $1;`,
 	)
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 	_, err = db.Prepare( // Получение результата из таблицы с выражениями
 		"orchestratorGet",
@@ -272,7 +310,11 @@ func Launch() {
 			WHERE request_id = $1;`,
 	)
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 
 	mu = &sync.RWMutex{}
@@ -304,11 +346,11 @@ func Launch() {
 		logger.Printf("Запланировали агента %v\n", i)
 	}
 
-	// Проверяем на возобновление работы
-	CheckWorkLeft(manager)
-
 	// Планируем горутину мониторинга агентов
 	go MonitorAgents(manager)
+
+	// Проверяем на возобновление работы
+	CheckWorkLeft(manager)
 
 	// Запускаем сервер
 	logger.Println("Запускаем HTTP сервер...")
@@ -322,37 +364,107 @@ func Launch() {
 }
 
 func CheckWorkLeft(m *AgentsManager) {
-	var req string
+	logger.Println("Оркестратор: проверка на непосчитанные выражения...")
+	var id int
 	rows, err := db.Query(
 		`SELECT request_id FROM requests
 			WHERE calculated = FALSE`,
 	)
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 	defer rows.Close()
+
 	for rows.Next() {
-		err := rows.Scan(&req)
+		logger.Println("Оркестратор нашел непосчитанное выражение...")
+		err := rows.Scan(&id)
 		if err != nil {
-			loggerErr.Panic(err)
+			loggerErr.Println("Паника:", err)
+			logger.Println("Критическая ошибка, завершаем работу программы...")
+			logger.Println("Отправляем сигнал прерывания...")
+			ServerExitChannel <- os.Interrupt
+			logger.Println("Отправили сигнал прерывания.")
 		}
-		log.Println(req)
+
+		if _, ok := m.TaskIds.Pop(); ok {
+			logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
+			m.TaskIds.Append(id)
+			return
+		}
+		logger.Println("Ищем свободного агента...")
+		mu.RLock()
+		// Ищем свободного агента
+		for i := 1; i < vars.N_agents+1; i++ {
+			if m.Agents[i] == 1 {
+				logger.Println(i, "агент свободен.")
+				db.Reset()
+				_, err = db.Exec(
+					`UPDATE requests
+						SET agent_proccess = $2
+						WHERE request_id = $1;`,
+						id,
+						i,
+					)
+				logger.Println("Hello again!")
+				if err != nil {
+					fmt.Println("Bye world!")
+				}
+				logger.Printf("Отдаем выражение агенту %v.", i)
+				manager.Agents[i] = 2
+				select {
+				case manager.TaskInformer[i] <- id:
+					logger.Printf("Выражение отдано агенту %v.", i)
+				default:
+					logger.Printf("Не смогли отдать выражение агенту %v.", i)
+				}
+				break
+			}
+		}
+		mu.RUnlock()
 	}
 	err = rows.Err()
 	if err != nil {
-		loggerErr.Panic(err)
+		loggerErr.Println("Паника:", err)
+		logger.Println("Критическая ошибка, завершаем работу программы...")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
 	}
 }
 
 func giveTaskToAgent(n, id int) error {
-	mu.Lock()
-	defer mu.Unlock()
-	_, err = db.Exec("orchestratorAssign", id, n)
+	logger.Println("Hello world!")
+	// mu.Lock()
+	// defer mu.Unlock()
+	// fmt.Println(db)
+	conn, err := db.Acquire()
+	fmt.Println("Acquired connection!", err)
+	conn.Close()
+	logger.Println("Hello!")
+	_, err = db.Exec(
+		`UPDATE requests
+			SET agent_proccess = $2
+			WHERE request_id = $1;`,
+			id,
+			n,
+		)
+	logger.Println("Hello again!")
 	if err != nil {
+		fmt.Println("Bye world!")
 		return err
 	}
+	logger.Printf("Отдаем выражение агенту %v.", n)
 	manager.Agents[n] = 2
-	manager.TaskInformer[n] <- id
+	select {
+	case manager.TaskInformer[n] <- id:
+		logger.Printf("Выражение отдано агенту %v.", n)
+	default:
+		logger.Printf("Не смогли отдать выражение агенту %v.", n)
+	}
 	return nil
 }
 
@@ -360,8 +472,8 @@ func MonitorAgents(m *AgentsManager) {
 	logger.Println("Мониторинг агентов подключился.")
 	var n int
 	var allDead bool = true
-	n = 0
 	for {
+		n = 0
 		for i := 1; i < vars.N_agents+1; i++ {
 			mu.RLock()
 			if m.Agents[i] == 0 { // Агент не записан как живой
@@ -380,7 +492,6 @@ func MonitorAgents(m *AgentsManager) {
 					mu.Lock()
 					m.Agents[i] = 0
 					mu.Unlock()
-					n--
 				} else {
 					loggerHB.Printf("Оркестратор - получили хартбит от агента %v.\n", i)
 					m.HbTime[i] = time.Now()
@@ -395,7 +506,6 @@ func MonitorAgents(m *AgentsManager) {
 					mu.Lock()
 					m.Agents[i] = 0
 					mu.Unlock()
-					n--
 				}
 			}
 			// Проверяем, не посчитал ли агент свое выражение
@@ -405,19 +515,31 @@ func MonitorAgents(m *AgentsManager) {
 				var res string
 				err = db.QueryRow("orchestratorReceive", i).Scan(&id, &res)
 				if err != nil {
-					loggerErr.Panic(err)
+					loggerErr.Println("Паника:", err)
+					logger.Println("Критическая ошибка, завершаем работу программы...")
+					logger.Println("Отправляем сигнал прерывания...")
+					ServerExitChannel <- os.Interrupt
+					logger.Println("Отправили сигнал прерывания.")
 				}
 				if ok {
 					logger.Printf("Получили результат от агента %v: %v.", i, res)
 					_, err = db.Exec("orchestratorUpdate", id, res, false)
 					if err != nil {
-						loggerErr.Panic(err)
+						loggerErr.Println("Паника:", err)
+						logger.Println("Критическая ошибка, завершаем работу программы...")
+						logger.Println("Отправляем сигнал прерывания...")
+						ServerExitChannel <- os.Interrupt
+						logger.Println("Отправили сигнал прерывания.")
 					}
 				} else {
 					logger.Printf("Получили результат от агента %v: ошибка.", i)
 					_, err = db.Exec("orchestratorUpdate", id, res, true)
 					if err != nil {
-						loggerErr.Panic(err)
+						loggerErr.Println("Паника:", err)
+						logger.Println("Критическая ошибка, завершаем работу программы...")
+						logger.Println("Отправляем сигнал прерывания...")
+						ServerExitChannel <- os.Interrupt
+						logger.Println("Отправили сигнал прерывания.")
 					}
 				}
 				logger.Println("Положили результат в БД.")
@@ -427,7 +549,7 @@ func MonitorAgents(m *AgentsManager) {
 			default:
 			}
 
-			logger.Println("Живых агентов:", n)
+			loggerHB.Println("Живых агентов:", n)
 			if n < 0 {
 				fmt.Printf("Оркестратор считает, что у нас %v живых агентов (где-то ошибка) :|\n", n)
 			} else if n == 0 && !allDead {

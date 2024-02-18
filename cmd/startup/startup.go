@@ -77,7 +77,7 @@ func main() {
 		if err = orchestrator.Srv.Close(); err != nil {
 			loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
 		}
-		<-orchestrator.ServerExitChannel
+		// <-orchestrator.ServerExitChannel
 	}
 	if db == nil {
 		fmt.Println("WHAT")
@@ -162,8 +162,8 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				expression varchar(100) NOT NULL,
 				calculated boolean DEFAULT FALSE,
 				result real,
-				errors boolean DEFAULT FALSE
-				agent_proccess integer NOT NULL UNIQUE
+				errors boolean DEFAULT FALSE,
+				agent_proccess integer UNIQUE
 				);`,
 			)
 			if err != nil {
@@ -179,7 +179,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		go func() {
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS agent_proccesses (
-				request_id integer references requests(request_id)
+				request_id integer references requests(request_id),
 				proccess_id integer PRIMARY KEY references requests(agent_proccess),
 				expression varchar(1000) NOT NULL,
 				parts varchar(2000),

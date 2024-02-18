@@ -37,3 +37,7 @@ TODO:
 <!-- - Decide way of creating tables (system fails handler), either:
     - Check for continuing in main - execute/ignore startup
     - Leave as is but ask to use shutdown file -->
+
+
+"Распределенный вычислитель арифметических выражений"
+

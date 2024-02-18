@@ -3,6 +3,7 @@ cmd/startup/startup.go
 
 Send expression
 curl http://127.0.0.1:8080/calculator/sendexpression
+curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=1&expression=1%2B2%2B3"
 
 Shutdown
 cmd/shutdown/shutdown.go

@@ -106,21 +106,21 @@ func Agent(a *AgentComm) {
 	}
 	_, err = db.Prepare( // Запись выражения в таблицу с процессами (агентами)
 		"dbPut",
-		`INSERT INTO agent_proccesses (proccess_id, expression)
-			VALUES ($1, $2);`,
+		`INSERT INTO agent_proccesses (proccess_id, expression, parts)
+			VALUES ($1, $2, $3);`,
 	)
 	if err != nil {
 		panic(err)
 	}
-	_, err = db.Prepare( // Запись обработанного выражения в БД
-		"dbParts",
-		`UPDATE agent_proccesses
-			SET parts = $2
-			WHERE proccess_id = $1;`,
-	)
-	if err != nil {
-		panic(err)
-	}
+	// _, err = db.Prepare( // Запись обработанного выражения в БД
+	// 	"dbParts",
+	// 	`UPDATE agent_proccesses
+	// 		SET parts = $2
+	// 		WHERE proccess_id = $1;`,
+	// )
+	// if err != nil {
+	// 	panic(err)
+	// }
 	_, err = db.Prepare( // Запись промежуточных результатов
 		"dbUpdate",
 		`UPDATE agent_proccesses
@@ -180,79 +180,37 @@ func Agent(a *AgentComm) {
 				return
 			case taskId = <-a.TaskInformer: // Получили ID выражения
 				logger.Printf("Агент %v получил ID выражения: %v\n", a.N, taskId)
-				if err = db.QueryRow("dbGet", taskId).Scan(&task); err != nil { // Получем выражение из БД
-					panic(err)
-				}
-				logger.Printf("Агент %v достал из БД выражение: %s\n", a.N, task)
-
-				// Записываем полученное обработанное выражение в таблицу с процессами
-				_, err = db.Exec("dbPut", a.N, task)
+				var exists bool
+				err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM agent_proccesses WHERE request_id = $1);", taskId).Scan(&exists)
 				if err != nil {
 					panic(err)
 				}
-				logger.Printf("Агент %v записал в БД выражение с ID %v\n", a.N, taskId)
-				// Разбивка выражения на слагаемые
-				parts := []string{}         // Слайс со слагаемыми
-				var next int                // Индекс следующего слагаемого
-				var lastIsMinusOrSlash bool // True если часть идет с вычитанием(-) или делением(/)
-				// Жертвуем микросекундами ради читаемости и критерия 7 =)
-				for i, digit := range task + "+" {
-					if string(digit) == "+" || string(digit) == "-" {
-						if !lastIsMinusOrSlash { // Операция сложения
-							parts = append(parts, task[next:i]) // Записываем часть до знака операции
-							next = i + 1                        // Обновляем индекс - следующий после знака символ
-						} else { // Операция вычитания
-							parts = append(parts, "-"+task[next:i]) // Добавляем минус перед числом если операция вычитания
-							next = i + 1
-						}
-						lastIsMinusOrSlash = !(string(digit) == "+") // Обновляем знак для следующей части
+				if !exists {
+					logger.Printf("Агент %v обрабатывает выражение с ID %v впервые.", a.N, taskId)
+					newParts, err = proccessExp(newParts, taskId, a.N ,task)
+					if err != nil {
+						panic(err)
 					}
-				}
-				// fmt.Println(strings.Join(parts, " | "))
-
-				// Разбивка слагаемых на множители (делители)
-				newParts = make([][]string, len(parts))
-				for j, part := range parts { // Проходимся по каждому слагаемому
-					newPart := []string{}
-					next = 0 // Обновляем индекс
-					lastIsMinusOrSlash = false
-					// Аналогично с разбивкой на слагаемые
-					for i, digit := range part + "*" {
-						if string(digit) == "*" || string(digit) == "/" {
-							if !lastIsMinusOrSlash {
-								newPart = append(newPart, part[next:i])
-								next = i + 1
-							} else {
-								newPart = append(newPart, "/"+part[next:i])
-								next = i + 1
-							}
-							lastIsMinusOrSlash = !(string(digit) == "*")
-						}
+				} else {
+					logger.Printf("Агент %v обрабатывает выражение с ID %v невпервые.", a.N, taskId)
+					_, err = db.Exec(
+						`UPDATE agent_proccesses
+							SET proccess_id = $2
+							WHERE request_id = $1;`,
+						taskId,
+						a.N,
+					)
+					var partsString string
+					err = db.QueryRow(
+						`SELECT expression, parts FROM agent_proccesses
+							WHERE proccess_id = $1;`,
+							a.N,
+					).Scan(&partsString)
+					for _, elem := range strings.Split(partsString, " ' ") {
+						newParts = append(newParts, strings.Split(elem, " | "))
 					}
-					if len(newPart)%2 != 0 && len(newPart) != 1 {
-						newPart = append(newPart, "1")
-					}
-					newParts[j] = newPart
+					logger.Printf("Агент %v получил части выражения с ID %v: %s.", a.N, taskId, newParts)
 				}
-				exp := make([]string, len(parts))
-				for i, part := range newParts {
-					exp[i] = strings.Join(part, " | ")
-				}
-				logger.Printf("Агент %v обработал выражение: [ %s ] - ID: %v\n", a.N, strings.Join(exp, " ' "), taskId)
-				/*
-					Where is my mind?
-					Where is my mind?
-					Where is my mind?
-					Way out in the water, see it swimmin'
-				*/
-
-				// Записываем обработанное выражение в БД
-				_, err = db.Exec("dbParts", a.N, strings.Join(exp, " ' "))
-				if err != nil {
-					panic(err)
-				}
-				logger.Printf("Агент %v записал в БД части выражения с ID %v\n", a.N, taskId)
-				// fmt.Println(strings.Join(exp, " ' "))
 
 				// Обрабатываем слагаемые:
 				logger.Printf("Агент %v начинает обработку слагаемых\n", a.N)
@@ -324,9 +282,17 @@ func Agent(a *AgentComm) {
 				}
 			}
 			logger.Printf("Агент %v произвел первичную обработку частей выражения, переходит в занятую фазу.\n", a.N)
-
+			
+			if activeWorkers == 0 {
+				db.Exec("dbRes", a.N, task)
+				logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
+				fmt.Println(taskId, ":", task, "=", task)
+				a.ResInformer <- true
+				continue
+			}
+			
 			// Фаза 2: агент управляет решением выражения - ждет результатов от вычислителей из канала chRes
-		Busy:
+			Busy:
 			for {
 				logger.Printf("Агент %v ждет вычислителей...\n", a.N)
 				select {
@@ -565,6 +531,71 @@ func getTimes(n int) *times {
 		log.Fatal(err)
 	}
 	return t
+}
+
+func proccessExp(newParts [][]string, taskId, N int, task string) ([][]string, error) {
+	if err = db.QueryRow("dbGet", taskId).Scan(&task); err != nil { // Получем выражение из БД
+		return [][]string{}, err
+	}
+	logger.Printf("Агент %v достал из БД выражение: %s\n", N, task)
+
+	// Разбивка выражения на слагаемые
+	parts := []string{}         // Слайс со слагаемыми
+	var next int                // Индекс следующего слагаемого
+	var lastIsMinusOrSlash bool // True если часть идет с вычитанием(-) или делением(/)
+	// Жертвуем микросекундами ради читаемости и критерия 7 =)
+	for i, digit := range task + "+" {
+		if string(digit) == "+" || string(digit) == "-" {
+			if !lastIsMinusOrSlash { // Операция сложения
+				parts = append(parts, task[next:i]) // Записываем часть до знака операции
+				next = i + 1                        // Обновляем индекс - следующий после знака символ
+			} else { // Операция вычитания
+				parts = append(parts, "-"+task[next:i]) // Добавляем минус перед числом если операция вычитания
+				next = i + 1
+			}
+			lastIsMinusOrSlash = !(string(digit) == "+") // Обновляем знак для следующей части
+		}
+	}
+	// fmt.Println(strings.Join(parts, " | "))
+
+	// Разбивка слагаемых на множители (делители)
+	newParts = make([][]string, len(parts))
+	for j, part := range parts { // Проходимся по каждому слагаемому
+		newPart := []string{}
+		next = 0 // Обновляем индекс
+		lastIsMinusOrSlash = false
+		// Аналогично с разбивкой на слагаемые
+		for i, digit := range part + "*" {
+			if string(digit) == "*" || string(digit) == "/" {
+				if !lastIsMinusOrSlash {
+					newPart = append(newPart, part[next:i])
+					next = i + 1
+				} else {
+					newPart = append(newPart, "/"+part[next:i])
+					next = i + 1
+				}
+				lastIsMinusOrSlash = !(string(digit) == "*")
+			}
+		}
+		if len(newPart)%2 != 0 && len(newPart) != 1 {
+			newPart = append(newPart, "1")
+		}
+		newParts[j] = newPart
+	}
+	exp := make([]string, len(parts))
+	for i, part := range newParts {
+		exp[i] = strings.Join(part, " | ")
+	}
+	logger.Printf("Агент %v обработал выражение: [ %s ] - ID: %v\n", N, strings.Join(exp, " ' "), taskId)
+
+	// Записываем обработанное выражение в БД
+	_, err = db.Exec("dbPut", N, task, strings.Join(exp, " ' "))
+	if err != nil {
+		return [][]string{}, err
+	}
+	logger.Printf("Агент %v записал в БД части выражения с ID %v\n", N, taskId)
+	// fmt.Println(strings.Join(exp, " ' "))
+	return newParts, nil
 }
 
 func convertStrsToFloat32(a, b string) (float32, float32, error) {
