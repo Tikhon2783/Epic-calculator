@@ -171,6 +171,15 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	vals := r.Context().Value(myKey).([2]myKeys)
 	id, exp := vals[0].(int), vals[1].(string)
 
+	_, err = db.Exec("orchestratorPut", id, exp)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+		loggerErr.Println("Оркестратор: ошибка записи выражения в таблицу с выражениями.")
+		http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
+		mu.Unlock()
+		return
+	}
+
 	if _, ok := manager.TaskIds.Pop(); ok {
 		logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
 		manager.TaskIds.Append(id)
@@ -184,12 +193,13 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 		if manager.Agents[i] == 1 {
 			logger.Println(i, "агент свободен.")
 			mu.Lock()
-			_, err = db.Exec("orchestratorPut", id, exp, i)
+			_, err = db.Exec("orchestratorAssign", id, i)
 			if err != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-				loggerErr.Println("Оркестратор: ошибка записи выражения в таблицу с выражениями.")
+				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями.")
 				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
 				mu.Unlock()
+				mu.RUnlock()
 				return
 			}
 			manager.Agents[i] = 2
@@ -227,15 +237,24 @@ func Launch() {
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
-		`INSERT INTO requests (request_id, expression, request_id)
-		VALUES ($1, $2, $3);`,
+		`INSERT INTO requests (request_id, expression)
+		VALUES ($1, $2);`,
+	)
+	if err != nil {
+		panic(err)
+	}
+	_, err = db.Prepare( // Запись результата в таблицу с выражениями
+		"orchestratorAssign",
+		`UPDATE requests
+			SET agent_proccess = $2
+			WHERE request_id = $1;`,
 	)
 	if err != nil {
 		panic(err)
 	}
 	_, err = db.Prepare( // Получение результата из таблицы с процессами (агентами)
 		"orchestratorReceive",
-		`SELECT result, request_id FROM requests
+		`SELECT request_id, result FROM agent_proccesses
 			WHERE proccess_id = $1;`,
 	)
 	if err != nil {
@@ -347,9 +366,9 @@ func MonitorAgents(m *AgentsManager) {
 			// Проверяем, не посчитал ли агент свое выражение
 			select {
 			case ok := <-m.ResInformer[i]:
-				var res string
 				var id int
-				err = db.QueryRow("orchestratorReceive", i).Scan(&res, &id)
+				var res string
+				err = db.QueryRow("orchestratorReceive", i).Scan(&id, &res)
 				if ok {
 					logger.Printf("Получили результат от агента %v: %v.", i, res)
 					_, err = db.Exec("orchestratorUpdate", id, res, false)
