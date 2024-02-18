@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +33,7 @@ var (
 	loggerHB          *log.Logger = shared.LoggerHeartbeats
 	Srv               *http.Server
 	manager           *AgentsManager
-	mu				  *sync.RWMutex
+	mu                *sync.RWMutex
 )
 
 // Структура для мониторинга агентов
@@ -41,8 +43,9 @@ type AgentsManager struct {
 	Hb           map[int]<-chan struct{} // Канал хартбитов
 	HbTime       map[int]time.Time       // Мапа с временем последних хартбитов
 	TaskInformer map[int]chan<- int      // Мапа каналов передачи выражения агенту
-	ResInformer  map[int]<-chan bool	 // Мапа каналов оповещения о посчитанном выражении
+	ResInformer  map[int]<-chan bool     // Мапа каналов оповещения о посчитанном выражении
 	Ctx          map[int]context.CancelFunc
+	TaskIds      []int
 }
 
 // Конструктор монитора агентов
@@ -55,6 +58,7 @@ func newAgentsManager() *AgentsManager {
 		TaskInformer: make(map[int]chan<- int),
 		ResInformer:  make(map[int]<-chan bool),
 		Ctx:          make(map[int]context.CancelFunc),
+		TaskIds:      make([]int, 0),
 	}
 }
 
@@ -84,10 +88,68 @@ type SrvSelfDestruct struct {
 	mu sync.Mutex
 }
 
-type rcvExpHandler struct{}
+// type rcvExpHandler struct{}
 
-func (h *rcvExpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// logger.Println("Got expression request...")
+// Проверка выражения на валидность
+func validityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Метод должен быть POST
+		if r.Method != http.MethodPost {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		err := r.ParseForm()
+		if err != nil {
+			http.Error(w, "Ошибка парсинга запроса", http.StatusInternalServerError)
+			return
+		}
+
+		idStr := r.PostForm.Get("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Ошибка преобразования ключа идемпотентности в тип int", http.StatusInternalServerError)
+			return
+		}
+
+		// Проверяем, принято ли уже было выражение с таким же ключом идемпотентности
+		var exists bool
+		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE id=$1)").Scan(&exists)
+		if err != nil {
+			http.Error(w, "Ошибка проверки ключа в базе данных", http.StatusInternalServerError)
+			return
+		}
+		if exists {
+			fmt.Fprint(w, http.StatusText(200), "Выражение уже было принято к обработке")
+			return
+		}
+
+		// Проверяем выражение на валидность
+		exp := r.PostForm.Get("expression")
+		replacer := strings.NewReplacer(
+			"+", "",
+			"-", "",
+			"*", "",
+			"/", "",
+		)
+		if _, err := strconv.Atoi(replacer.Replace(exp)); err != nil {
+			http.Error(w, "Выражение невалидно", http.StatusBadRequest)
+			return
+		}
+
+		// Передаем обработчику ID и выражение через контекст
+		type myKeys interface{}
+		var keyId myKeys = "id"
+		var keyExp myKeys = "expression"
+		ctx1 := context.WithValue(r.Context(), keyId, id)
+		ctx2 := context.WithValue(ctx1, keyExp, exp)
+
+		next.ServeHTTP(w, r.WithContext(ctx2))
+	})
+}
+
+func handleExpression(w http.ResponseWriter, r *http.Request) {
+	logger.Println("Got expression request...")
 	// exp := "1*2*3/4*5/0*1"
 	// _, err = db.Exec(
 	// 	`INSERT INTO requests (request_id, expression, agent_proccess)
@@ -104,7 +166,8 @@ func (h *rcvExpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// manager.TaskInformer[1] <- 1
 	// logger.Println("Sent task to agent 1, returning code 200")
 	// fmt.Fprint(w, http.StatusText(200))
-	
+
+	// exp := r.Body
 }
 
 type checkExpHandler struct{}
@@ -167,10 +230,10 @@ func Launch() {
 	mux.HandleFunc("/calculator", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "Куда-то ты не туда забрёл...")
 	})
-	mux.Handle("/calculator/sendexpression", &rcvExpHandler{})    // Принять выражение
-	mux.Handle("/calculator/checkexpression", &checkExpHandler{}) // Узнать статус выражения
-	mux.Handle("/calculator/getexpressions", &getExpHandler{})    // Получить список всех выражений
-	mux.HandleFunc("/calculator/values", TimeValues)              // Получение списка доступных операций со временем их выполения
+	mux.Handle("/calculator/sendexpression", validityMiddleware(http.HandlerFunc(handleExpression))) // Принять выражение
+	mux.Handle("/calculator/checkexpression", &checkExpHandler{})                                    // Узнать статус выражения
+	mux.Handle("/calculator/getexpressions", &getExpHandler{})                                       // Получить список всех выражений
+	mux.HandleFunc("/calculator/values", TimeValues)                                                 // Получение списка доступных операций со временем их выполения
 	// mux.HandleFunc("/calculator/heartbeats", GetHeartbeat)        // Хартбиты (пинги) от агентов
 
 	// Сам http сервер оркестратор
@@ -186,10 +249,10 @@ func Launch() {
 		go agent.Agent(NewAgentComm(i, manager)) // Запускаем горутину агента и передаем ей структуру агента, обновляя монитор агентов
 		logger.Printf("Запланировали агента %v\n", i)
 	}
-	
+
 	// Планируем горутину мониторинга агентов
 	go MonitorAgents(manager)
-	
+
 	// Запускаем сервер
 	logger.Println("Запускаем HTTP сервер...")
 	if err = Srv.ListenAndServe(); err != nil {
@@ -262,7 +325,7 @@ func MonitorAgents(m *AgentsManager) {
 				mu.Unlock()
 			default:
 			}
-			
+
 			logger.Println("Живых агентов:", n)
 			if n < 0 {
 				fmt.Printf("Оркестратор считает, что у нас %v живых агентов (где-то ошибка) :|\n", n)
