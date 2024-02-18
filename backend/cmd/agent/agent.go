@@ -382,8 +382,8 @@ func Agent(a *AgentComm) {
 						}
 						elem := newParts[i]
 						if len(elem) > 1 { // Однозначные элементы на данном этапе уже в слайсе 'comps'
-							var free arr = &freeArr{}
-							if _, ok := free.pop(); ok {
+							var free Queue = &Arr{}
+							if _, ok := free.Pop(); ok {
 								panic("- ERROR - free.pop() is wrong! - ERROR -")
 							}
 							logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
@@ -395,13 +395,13 @@ func Agent(a *AgentComm) {
 									logger.Printf("Агент %v: 2 множитель пустой, пропускаем итерацию %v.\n", a.N, j)
 									continue
 								} else if v1 == "" || v1 == "X" {
-									if index, ok := free.pop(); ok {
+									if index, ok := free.Pop(); ok {
 										v1 = elem[index]
 										pos = [3]int{i, index, j}
 										newParts[i][index] = "X"
 										newParts[i][j] = "X"
 									} else {
-										free.append(j)
+										free.Append(j)
 										logger.Printf("Агент %v: Не нашли пару ко 2 множителю, записываем, пропускаем итерацию %v.\n", a.N, j)
 										continue
 									}
@@ -437,8 +437,8 @@ func Agent(a *AgentComm) {
 					// Ищем, что можно сложить / вычесть
 					logger.Printf("Агент %v начинает производить сложение слагаемых.\n", a.N)
 					logger.Println("Слайс слагаемых:", fmt.Sprint("[", strings.Join(comps, "'"), "]"))
-					var free arr = &freeArr{}
-					if _, ok := free.pop(); ok {
+					var free Queue = &Arr{}
+					if _, ok := free.Pop(); ok {
 						panic("- ERROR - free.pop() is wrong! - ERROR -")
 					}
 					for i := 1; i < len(comps); i += 2 {
@@ -450,13 +450,13 @@ func Agent(a *AgentComm) {
 							logger.Printf("Агент %v: 2 слагаемое пустое, пропускаем итерацию %v.\n", a.N, i)
 							continue
 						} else if v1 == "" || v1 == "X" {
-							if index, ok := free.pop(); ok {
+							if index, ok := free.Pop(); ok {
 								v1 = comps[index]
 								pos = [3]int{-1, index, i}
 								comps[index] = "X"
 								comps[i] = "X"
 							} else {
-								free.append(i)
+								free.Append(i)
 								logger.Printf("Агент %v: Не нашли пару ко 2 слагаемому, записываем, пропускаем итерацию %v.\n", a.N, i)
 								continue
 							}
@@ -499,23 +499,23 @@ func Agent(a *AgentComm) {
 	wg.Wait()
 }
 
-type arr interface {
-	append(n int)
-	pop() (int, bool)
+type Queue interface {
+	Append(n int)
+	Pop() (int, bool)
 }
 
-type freeArr struct {
+type Arr struct {
 	arr []int
 	mu  sync.Mutex
 }
 
-func (a *freeArr) append(n int) {
+func (a *Arr) Append(n int) {
 	a.mu.Lock()
 	a.arr = append(a.arr, n)
 	a.mu.Unlock()
 }
 
-func (a *freeArr) pop() (int, bool) {
+func (a *Arr) Pop() (int, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if len(a.arr) == 0 {

@@ -23,12 +23,12 @@ const ( // Дефолтные временные переменные
 )
 
 var ( // Переменные для работы логгера
-	LoggerFlagsDebug int = log.Lshortfile				// Флаги обычного логгера
+	LoggerFlagsDebug int = log.Lshortfile | log.Ltime	// Флаги обычного логгера
 	LoggerFlagsError int = log.Lshortfile | log.Ltime	// Флаги логгера ошибок
 	LoggerFlagsPings int = log.Ltime					// Флаги логгера хартбитов
 	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: backendlogs/debug.txt, 2: Stdout + debug.txt)
-	LoggerOutputErr int = 0			// Вывод логгера ошибок (0: Stderr, 1: backendlogs/errors.txt, 2: Stderr + errors.txt)
-	LoggerOutputHeartbeats int = 1	// Вывод логгера ошибок (0: Stdout, 1: backendlogs/heartbeats.txt, 2: Stdout + heartbeats.txt)
+	LoggerOutputError int = 0			// Вывод логгера ошибок (0: Stderr, 1: backendlogs/errors.txt, 2: Stderr + errors.txt)
+	LoggerOutputPings int = 1	// Вывод логгера ошибок (0: Stdout, 1: backendlogs/heartbeats.txt, 2: Stdout + heartbeats.txt)
 )
 
 const (

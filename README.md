@@ -6,7 +6,7 @@ REMEMBER TO:
 - Put contacts
 - Clear + explain vars/variables.go
 - Delete server self destruction function
-- Translate output text
+<!-- - Translate output text -->
 - Remove unfunny ahh comments :\
     - Agent:102
     - Agent: break Free cycle
@@ -16,17 +16,17 @@ DON'T FORGET TO:
 
 TODO:
 - Orchestrator server
-    - Middlewares
+    <!-- - Middlewares
         - RequestId check
-        - Valid expression check
+        - Valid expression check -->
     - Post requests
         - Time vars changes (db only)
         - Actual expressions
-            - Parsing
+            <!-- - Parsing -->
             - Organizing agent(s)
     - Check for tasks at start
 - Agents
-    - Check for continuing instead of starting new
+    - Check for continuing instead of starting new proccess
     <!-- - Calculators-goroutines -->
 <!-- - Frontend
     - Html pages -->

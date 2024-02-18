@@ -45,7 +45,7 @@ type AgentsManager struct {
 	TaskInformer map[int]chan<- int      // Мапа каналов передачи выражения агенту
 	ResInformer  map[int]<-chan bool     // Мапа каналов оповещения о посчитанном выражении
 	Ctx          map[int]context.CancelFunc
-	TaskIds      []int
+	TaskIds      agent.Queue			 // Очередь не принятых агентами выражений
 }
 
 // Конструктор монитора агентов
@@ -58,7 +58,7 @@ func newAgentsManager() *AgentsManager {
 		TaskInformer: make(map[int]chan<- int),
 		ResInformer:  make(map[int]<-chan bool),
 		Ctx:          make(map[int]context.CancelFunc),
-		TaskIds:      make([]int, 0),
+		TaskIds:      &agent.Arr{},
 	}
 }
 
@@ -90,17 +90,32 @@ type SrvSelfDestruct struct {
 
 // type rcvExpHandler struct{}
 
+type myKeys interface{}
+var myKey myKeys = "myKey"
+
 // Проверка выражения на валидность
 func validityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+				loggerErr.Println("Оркестратор: непредвиденная ПАНИКА при обработке выражения.")
+				http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+			}
+		}()
+
+		logger.Println("Оркестратор получил запрос на подсчет выражения.")
 		// Метод должен быть POST
 		if r.Method != http.MethodPost {
+			logger.Println("Неправильный метод, выражение не обрабатывается.")
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
 
 		err := r.ParseForm()
 		if err != nil {
+			logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+			loggerErr.Println("Оркестратор: ошибка парсинга запроса.")
 			http.Error(w, "Ошибка парсинга запроса", http.StatusInternalServerError)
 			return
 		}
@@ -108,6 +123,8 @@ func validityMiddleware(next http.Handler) http.Handler {
 		idStr := r.PostForm.Get("id")
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
+			logger.Println("Ошибка, выражение не обрабатывается.")
+			loggerErr.Println("Оркестратор: ошибка преобразования ключа идемпотентности в тип int.")
 			http.Error(w, "Ошибка преобразования ключа идемпотентности в тип int", http.StatusInternalServerError)
 			return
 		}
@@ -116,10 +133,13 @@ func validityMiddleware(next http.Handler) http.Handler {
 		var exists bool
 		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE id=$1)").Scan(&exists)
 		if err != nil {
+			logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+			loggerErr.Println("Оркестратор: ошибка проверки ключа в базе данных.")
 			http.Error(w, "Ошибка проверки ключа в базе данных", http.StatusInternalServerError)
 			return
 		}
 		if exists {
+			logger.Println("Выражение с повторяющимся ключем идемпотентности, возвращаем код 200.")
 			fmt.Fprint(w, http.StatusText(200), "Выражение уже было принято к обработке")
 			return
 		}
@@ -133,41 +153,59 @@ func validityMiddleware(next http.Handler) http.Handler {
 			"/", "",
 		)
 		if _, err := strconv.Atoi(replacer.Replace(exp)); err != nil {
+			logger.Println("Ошибка: нарушен синтаксис выражений, выражение не обрабатывается.")
 			http.Error(w, "Выражение невалидно", http.StatusBadRequest)
 			return
 		}
 
 		// Передаем обработчику ID и выражение через контекст
-		type myKeys interface{}
-		var keyId myKeys = "id"
-		var keyExp myKeys = "expression"
-		ctx1 := context.WithValue(r.Context(), keyId, id)
-		ctx2 := context.WithValue(ctx1, keyExp, exp)
+		ctx := context.WithValue(r.Context(), myKey, [2]myKeys{id, exp})
 
-		next.ServeHTTP(w, r.WithContext(ctx2))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func handleExpression(w http.ResponseWriter, r *http.Request) {
-	logger.Println("Got expression request...")
-	// exp := "1*2*3/4*5/0*1"
-	// _, err = db.Exec(
-	// 	`INSERT INTO requests (request_id, expression, agent_proccess)
-	// 		VALUES ($1, $2, $3)`,
-	// 	1,
-	// 	exp,
-	// 	1,
-	// )
-	// if err != nil {
-	// 	loggerErr.Panic(err)
-	// }
-	// logger.Println("Put expression in DB, sending signal to agent 1...")
-	// fmt.Println(manager.TaskInformer)
-	// manager.TaskInformer[1] <- 1
-	// logger.Println("Sent task to agent 1, returning code 200")
-	// fmt.Fprint(w, http.StatusText(200))
+	logger.Println("Обработчик выражений получил запрос...")
 
-	// exp := r.Body
+	vals := r.Context().Value(myKey).([2]myKeys)
+	id, exp := vals[0].(int), vals[1].(string)
+
+	if _, ok := manager.TaskIds.Pop(); ok {
+		logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
+		manager.TaskIds.Append(id)
+		fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
+		return
+	}
+	logger.Println("Ищем свободного агента...")
+	mu.RLock()
+	// Ищем свободного агента
+	for i := 1; i < vars.N_agents + 1; i++ {
+		if manager.Agents[i] == 1 {
+			logger.Println(i, "агент свободен.")
+			mu.Lock()
+			_, err = db.Exec("orchestratorPut", id, exp, i)
+			if err != nil {
+				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+				loggerErr.Println("Оркестратор: ошибка записи выражения в таблицу с выражениями.")
+				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
+				mu.Unlock()
+				return
+			}
+			manager.Agents[i] = 2
+			mu.Unlock()
+			mu.RUnlock()
+			manager.TaskInformer[i] <- id
+			logger.Printf("Выражение отдано агенту %v, возвращем код 200.", i)
+			fmt.Fprint(w, http.StatusText(200), "Выражение принято на обработку агентом")
+			return
+		}
+	}
+	mu.RUnlock()
+
+	logger.Println("Все агенты заняты, кладем выражение в очередь.")
+	manager.TaskIds.Append(id)
+	fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
 }
 
 type checkExpHandler struct{}
@@ -189,7 +227,7 @@ func Launch() {
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
-		`INSERT INTO requests (request_id, expression, agent_proccess)
+		`INSERT INTO requests (request_id, expression, request_id)
 		VALUES ($1, $2, $3);`,
 	)
 	if err != nil {
@@ -270,7 +308,7 @@ func MonitorAgents(m *AgentsManager) {
 	var allDead bool = true
 	n = 0
 	for {
-		for i := 1; i < len(m.Agents); i++ {
+		for i := 1; i < vars.N_agents + 1; i++ {
 			mu.RLock()
 			if m.Agents[i] == 0 { // Агент не записан как живой
 				mu.RUnlock()

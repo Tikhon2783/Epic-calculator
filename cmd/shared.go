@@ -64,7 +64,7 @@ func GetDebugLogger() *log.Logger {
 }
 
 func GetErrLogger() *log.Logger {
-	switch vars.LoggerOutputErr {
+	switch vars.LoggerOutputError {
 	case 0:
 		return log.New(os.Stderr, "", vars.LoggerFlagsError)
 	case 1:
@@ -90,7 +90,7 @@ func GetErrLogger() *log.Logger {
 }
 
 func GetHeartbeatLogger() *log.Logger {
-	switch vars.LoggerOutputHeartbeats {
+	switch vars.LoggerOutputPings {
 	case 0:
 		return log.New(os.Stdout, "PULSE ", vars.LoggerFlagsPings)
 	case 1:
