@@ -351,6 +351,7 @@ func Launch() {
 
 	// Запускаем сервер
 	logger.Println("Запускаем HTTP сервер...")
+	fmt.Println("Калькулятор готов к работе!")
 	if err = Srv.ListenAndServe(); err != nil {
 		loggerErr.Println("HTTP сервер накрылся:", err)
 	}
