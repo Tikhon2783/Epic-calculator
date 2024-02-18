@@ -45,7 +45,7 @@ type AgentsManager struct {
 	TaskInformer map[int]chan<- int      // Мапа каналов передачи выражения агенту
 	ResInformer  map[int]<-chan bool     // Мапа каналов оповещения о посчитанном выражении
 	Ctx          map[int]context.CancelFunc
-	TaskIds      agent.Queue			 // Очередь не принятых агентами выражений
+	TaskIds      agent.Queue // Очередь не принятых агентами выражений
 }
 
 // Конструктор монитора агентов
@@ -91,6 +91,7 @@ type SrvSelfDestruct struct {
 // type rcvExpHandler struct{}
 
 type myKeys interface{}
+
 var myKey myKeys = "myKey"
 
 // Проверка выражения на валидность
@@ -189,22 +190,18 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Ищем свободного агента...")
 	mu.RLock()
 	// Ищем свободного агента
-	for i := 1; i < vars.N_agents + 1; i++ {
+	for i := 1; i < vars.N_agents+1; i++ {
 		if manager.Agents[i] == 1 {
 			logger.Println(i, "агент свободен.")
-			mu.Lock()
-			_, err = db.Exec("orchestratorAssign", id, i)
+			err = giveTaskToAgent(i, id)
+			mu.RUnlock()
 			if err != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями.")
 				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
-				mu.Unlock()
-				mu.RUnlock()
 				return
 			}
 			manager.Agents[i] = 2
-			mu.Unlock()
-			mu.RUnlock()
 			manager.TaskInformer[i] <- id
 			logger.Printf("Выражение отдано агенту %v, возвращем код 200.", i)
 			fmt.Fprint(w, http.StatusText(200), "Выражение принято на обработку агентом")
@@ -241,7 +238,7 @@ func Launch() {
 		VALUES ($1, $2);`,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	_, err = db.Prepare( // Запись результата в таблицу с выражениями
 		"orchestratorAssign",
@@ -250,7 +247,7 @@ func Launch() {
 			WHERE request_id = $1;`,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	_, err = db.Prepare( // Получение результата из таблицы с процессами (агентами)
 		"orchestratorReceive",
@@ -258,7 +255,7 @@ func Launch() {
 			WHERE proccess_id = $1;`,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	_, err = db.Prepare( // Запись результата в таблицу с выражениями
 		"orchestratorUpdate",
@@ -267,7 +264,7 @@ func Launch() {
 			WHERE request_id = $1;`,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	_, err = db.Prepare( // Получение результата из таблицы с выражениями
 		"orchestratorGet",
@@ -275,7 +272,7 @@ func Launch() {
 			WHERE request_id = $1;`,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 
 	mu = &sync.RWMutex{}
@@ -307,6 +304,9 @@ func Launch() {
 		logger.Printf("Запланировали агента %v\n", i)
 	}
 
+	// Проверяем на возобновление работы
+	CheckWorkLeft(manager)
+
 	// Планируем горутину мониторинга агентов
 	go MonitorAgents(manager)
 
@@ -321,13 +321,48 @@ func Launch() {
 	logger.Println("Отправили сигнал прерывания.")
 }
 
+func CheckWorkLeft(m *AgentsManager) {
+	var req string
+	rows, err := db.Query(
+		`SELECT request_id FROM requests
+			WHERE calculated = FALSE`,
+	)
+	if err != nil {
+		loggerErr.Panic(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&req)
+		if err != nil {
+			loggerErr.Panic(err)
+		}
+		log.Println(req)
+	}
+	err = rows.Err()
+	if err != nil {
+		loggerErr.Panic(err)
+	}
+}
+
+func giveTaskToAgent(n, id int) error {
+	mu.Lock()
+	defer mu.Unlock()
+	_, err = db.Exec("orchestratorAssign", id, n)
+	if err != nil {
+		return err
+	}
+	manager.Agents[n] = 2
+	manager.TaskInformer[n] <- id
+	return nil
+}
+
 func MonitorAgents(m *AgentsManager) {
 	logger.Println("Мониторинг агентов подключился.")
 	var n int
 	var allDead bool = true
 	n = 0
 	for {
-		for i := 1; i < vars.N_agents + 1; i++ {
+		for i := 1; i < vars.N_agents+1; i++ {
 			mu.RLock()
 			if m.Agents[i] == 0 { // Агент не записан как живой
 				mu.RUnlock()
@@ -369,12 +404,21 @@ func MonitorAgents(m *AgentsManager) {
 				var id int
 				var res string
 				err = db.QueryRow("orchestratorReceive", i).Scan(&id, &res)
+				if err != nil {
+					loggerErr.Panic(err)
+				}
 				if ok {
 					logger.Printf("Получили результат от агента %v: %v.", i, res)
 					_, err = db.Exec("orchestratorUpdate", id, res, false)
+					if err != nil {
+						loggerErr.Panic(err)
+					}
 				} else {
 					logger.Printf("Получили результат от агента %v: ошибка.", i)
 					_, err = db.Exec("orchestratorUpdate", id, res, true)
+					if err != nil {
+						loggerErr.Panic(err)
+					}
 				}
 				logger.Println("Положили результат в БД.")
 				mu.Lock()
