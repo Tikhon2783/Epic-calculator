@@ -199,9 +199,9 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 				`UPDATE requests
 					SET agent_proccess = $2
 					WHERE request_id = $1;`,
-					id,
-					i,
-				)
+				id,
+				i,
+			)
 			logger.Println("Hello again!")
 			if err != nil {
 				fmt.Println("Bye world!")
@@ -401,25 +401,13 @@ func CheckWorkLeft(m *AgentsManager) {
 		for i := 1; i < vars.N_agents+1; i++ {
 			if m.Agents[i] == 1 {
 				logger.Println(i, "агент свободен.")
-				db.Reset()
-				_, err = db.Exec(
-					`UPDATE requests
-						SET agent_proccess = $2
-						WHERE request_id = $1;`,
-						id,
-						i,
-					)
-				logger.Println("Hello again!")
+				err = giveTaskToAgent(i, id)
 				if err != nil {
-					fmt.Println("Bye world!")
-				}
-				logger.Printf("Отдаем выражение агенту %v.", i)
-				manager.Agents[i] = 2
-				select {
-				case manager.TaskInformer[i] <- id:
-					logger.Printf("Выражение отдано агенту %v.", i)
-				default:
-					logger.Printf("Не смогли отдать выражение агенту %v.", i)
+					loggerErr.Println("Паника:", err)
+					logger.Println("Критическая ошибка, завершаем работу программы...")
+					logger.Println("Отправляем сигнал прерывания...")
+					ServerExitChannel <- os.Interrupt
+					logger.Println("Отправили сигнал прерывания.")
 				}
 				break
 			}
@@ -434,27 +422,27 @@ func CheckWorkLeft(m *AgentsManager) {
 		ServerExitChannel <- os.Interrupt
 		logger.Println("Отправили сигнал прерывания.")
 	}
+	logger.Println("Оркестратор закончил проверку на непосчитанные выражения.")
 }
 
 func giveTaskToAgent(n, id int) error {
-	logger.Println("Hello world!")
+	logger.Printf("Отдаем задачу с ID %v агенту %v...", id, n)
 	// mu.Lock()
 	// defer mu.Unlock()
 	// fmt.Println(db)
-	conn, err := db.Acquire()
-	fmt.Println("Acquired connection!", err)
-	conn.Close()
-	logger.Println("Hello!")
+	// conn, err := db.Acquire()
+	// fmt.Println("Acquired connection!", err)
+	// conn.Close()
+	db.Reset()
+	logger.Println("Сбросили подключения")
 	_, err = db.Exec(
 		`UPDATE requests
 			SET agent_proccess = $2
 			WHERE request_id = $1;`,
-			id,
-			n,
-		)
-	logger.Println("Hello again!")
+		id,
+		n,
+	)
 	if err != nil {
-		fmt.Println("Bye world!")
 		return err
 	}
 	logger.Printf("Отдаем выражение агенту %v.", n)
@@ -514,6 +502,7 @@ func MonitorAgents(m *AgentsManager) {
 				var id int
 				var res string
 				err = db.QueryRow("orchestratorReceive", i).Scan(&id, &res)
+				fmt.Println(id, res)
 				if err != nil {
 					loggerErr.Println("Паника:", err)
 					logger.Println("Критическая ошибка, завершаем работу программы...")
@@ -543,6 +532,14 @@ func MonitorAgents(m *AgentsManager) {
 					}
 				}
 				logger.Println("Положили результат в БД.")
+				_, err = db.Exec("DELETE FROM requests WHERE agent_proccess = $1;", i)
+				if err != nil {
+					loggerErr.Println("Паника:", err)
+					logger.Println("Критическая ошибка, завершаем работу программы...")
+					logger.Println("Отправляем сигнал прерывания...")
+					ServerExitChannel <- os.Interrupt
+					logger.Println("Отправили сигнал прерывания.")
+				}
 				mu.Lock()
 				m.Agents[i] = 1
 				mu.Unlock()

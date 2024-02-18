@@ -161,7 +161,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				request_id integer PRIMARY KEY,
 				expression varchar(100) NOT NULL,
 				calculated boolean DEFAULT FALSE,
-				result real,
+				result varchar,
 				errors boolean DEFAULT FALSE,
 				agent_proccess integer UNIQUE
 				);`,
@@ -183,8 +183,8 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				proccess_id integer PRIMARY KEY references requests(agent_proccess),
 				expression varchar(1000) NOT NULL,
 				parts varchar(2000),
-				parts_results real[],
-				result real
+				parts_results varchar[],
+				result varchar
 				);`,
 			)
 			if err != nil {

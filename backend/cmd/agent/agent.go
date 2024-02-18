@@ -106,8 +106,8 @@ func Agent(a *AgentComm) {
 	}
 	_, err = db.Prepare( // Запись выражения в таблицу с процессами (агентами)
 		"dbPut",
-		`INSERT INTO agent_proccesses (proccess_id, expression, parts)
-			VALUES ($1, $2, $3);`,
+		`INSERT INTO agent_proccesses (request_id, proccess_id, expression, parts)
+			VALUES ($1, $2, $3, $4);`,
 	)
 	if err != nil {
 		panic(err)
@@ -450,9 +450,12 @@ func Agent(a *AgentComm) {
 
 					// Проверяем, готов ли ответ
 					if val := countReal(comps); val != "" && activeWorkers == 0 {
-						db.Exec("dbRes", a.N, val)
+						_, err = db.Exec("dbRes", a.N, val)
+						if err != nil {
+							panic(err)
+						}
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
-						fmt.Println(taskId, ":", task, "=", val)
+						fmt.Printf("%v: '%s' = '%v'\n", taskId, task, val)
 						a.ResInformer <- true
 						break Busy
 					}
@@ -589,7 +592,7 @@ func proccessExp(newParts [][]string, taskId, N int, task string) ([][]string, e
 	logger.Printf("Агент %v обработал выражение: [ %s ] - ID: %v\n", N, strings.Join(exp, " ' "), taskId)
 
 	// Записываем обработанное выражение в БД
-	_, err = db.Exec("dbPut", N, task, strings.Join(exp, " ' "))
+	_, err = db.Exec("dbPut", taskId, N, task, strings.Join(exp, " ' "))
 	if err != nil {
 		return [][]string{}, err
 	}
