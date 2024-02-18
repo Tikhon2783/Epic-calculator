@@ -52,8 +52,8 @@ func Agent(a *AgentComm) {
 			loggerErr.Printf("Перехватили панику агента %v: %s\n— Отключаем агента %v...\n", a.N, rec, a.N)
 		}
 		pulse.Stop()
-		close(a.Heartbeat)
-		close(a.ResInformer)
+		// close(a.Heartbeat)
+		// close(a.ResInformer)
 		logger.Printf("Агент %v отключился.\n", a.N)
 	}()
 
@@ -156,14 +156,14 @@ func Agent(a *AgentComm) {
 
 		// Переменные ниже понадобятся позже - иначе их не видит второй селект
 		chRes := make(chan [4]float32) // Канал для получения значений от вычислителей
-		var comps []string             // Слайс со слагаемыми
-
+		
 		for {
-
+			
 			expParts := make(map[[3]int]string) // Мапа для мониторинга статусов частей выражения
 			// ^ ключ - координаты, значение - делитель(1), множитель (2) или сложение (-1)
 			// partStatus := make(map[[2]int]bool) // Мапа для мониторинга статусов чисел
 			var (
+				comps []string         // Слайс со слагаемыми
 				newParts      [][]string
 				stoppedAt     int = 1 // Индекс последней части, принятой вычеслителем
 				activeWorkers int     // Кол-во занятых вычислителей
@@ -225,6 +225,9 @@ func Agent(a *AgentComm) {
 					if len(elem) == 1 { // Слагаемое - единственное число, записываем его в слайс со слагаемыми
 						logger.Printf("Агент %v добавляет слагаемое '%s'.\n", a.N, elem[0])
 						comps = append(comps, elem[0])
+						if len(comps)%2 == 1 && len(comps) != 1 {
+							comps = append(comps, "0")
+						}
 					} else { // Внутри слагаемого нужно производить вычисления
 						logger.Printf("Агент %v обрабатывает множители %v слагаемого...\n", a.N, i)
 						for j := 1; j < len(elem); j += 2 { // Проходимся по множителям
@@ -260,6 +263,7 @@ func Agent(a *AgentComm) {
 
 				// Иначе проходимся по однозначным слагаемым и складываем их
 				logger.Printf("Агент %v начинает производить сложение слагаемых.\n", a.N)
+				logger.Println("Слайс слагаемых:", fmt.Sprint("[", strings.Join(comps, "'"), "]"))
 				for i := 1; i < len(comps); i += 2 {
 					logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
 					v1, v2 := comps[i-1], comps[i]
@@ -303,7 +307,7 @@ func Agent(a *AgentComm) {
 				case num := <-chRes: // Получили значение от вычислителя
 					logger.Printf("Агент %v получил значение: ", a.N)
 					if num == [4]float32{-1, -1, -1, -1} {
-						db.Exec("dbRes", a.N, 0)
+						db.Exec("dbRes", a.N, "0")
 						loggerErr.Printf("Агент %v: в выражении присутствует деление на ноль.\n", a.N)
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 						fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
@@ -540,7 +544,7 @@ func proccessExp(newParts [][]string, taskId, N int, task string) ([][]string, e
 	if err = db.QueryRow("dbGet", taskId).Scan(&task); err != nil { // Получем выражение из БД
 		return [][]string{}, err
 	}
-	logger.Printf("Агент %v достал из БД выражение: %s\n", N, task)
+	logger.Printf("Агент %v достал из БД выражение: '%s'\n", N, task)
 
 	// Разбивка выражения на слагаемые
 	parts := []string{}         // Слайс со слагаемыми

@@ -79,10 +79,14 @@ func main() {
 		}
 		// <-orchestrator.ServerExitChannel
 	}
+	logger.Println("Hmmm")
 	if db == nil {
 		fmt.Println("WHAT")
 	}
+	db.Close()
+	time.Sleep(time.Second)
 	for _, f := range shared.OpenFiles {
+		logger.Println("А файл то пустой", f.Name())
 		if f != nil {
 			logger.Println("Закрываем файл", f.Name())
 			err = f.Close()
@@ -91,7 +95,6 @@ func main() {
 			}
 		}
 	}
-	db.Close()
 	logger.Print("Программа завершенна.")
 	fmt.Print("Программа завершенна.")
 	os.Exit(0)

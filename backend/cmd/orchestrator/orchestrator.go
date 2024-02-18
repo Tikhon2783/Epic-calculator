@@ -204,7 +204,10 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 			)
 			logger.Println("Hello again!")
 			if err != nil {
-				fmt.Println("Bye world!")
+				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями:", err)
+				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
+				return
 			}
 			logger.Printf("Отдаем выражение агенту %v.", i)
 			manager.Agents[i] = 2
@@ -215,12 +218,6 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 				logger.Printf("Не смогли отдать выражение агенту %v.", i)
 			}
 			// mu.RUnlock()
-			if err != nil {
-				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями.")
-				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
-				return
-			}
 			logger.Printf("Выражение отдано агенту %v, возвращем код 200.", i)
 			fmt.Fprint(w, http.StatusText(200), "Выражение принято на обработку агентом")
 			return
@@ -509,6 +506,7 @@ func MonitorAgents(m *AgentsManager) {
 					logger.Println("Отправляем сигнал прерывания...")
 					ServerExitChannel <- os.Interrupt
 					logger.Println("Отправили сигнал прерывания.")
+					return
 				}
 				if ok {
 					logger.Printf("Получили результат от агента %v: %v.", i, res)
@@ -519,6 +517,7 @@ func MonitorAgents(m *AgentsManager) {
 						logger.Println("Отправляем сигнал прерывания...")
 						ServerExitChannel <- os.Interrupt
 						logger.Println("Отправили сигнал прерывания.")
+						return
 					}
 				} else {
 					logger.Printf("Получили результат от агента %v: ошибка.", i)
@@ -529,16 +528,32 @@ func MonitorAgents(m *AgentsManager) {
 						logger.Println("Отправляем сигнал прерывания...")
 						ServerExitChannel <- os.Interrupt
 						logger.Println("Отправили сигнал прерывания.")
+						return
 					}
 				}
 				logger.Println("Положили результат в БД.")
-				_, err = db.Exec("DELETE FROM requests WHERE agent_proccess = $1;", i)
+				_, err = db.Exec("DELETE FROM agent_proccesses WHERE proccess_id = $1;", i)
 				if err != nil {
 					loggerErr.Println("Паника:", err)
 					logger.Println("Критическая ошибка, завершаем работу программы...")
 					logger.Println("Отправляем сигнал прерывания...")
 					ServerExitChannel <- os.Interrupt
 					logger.Println("Отправили сигнал прерывания.")
+					return
+				}
+				_, err = db.Exec(
+					`UPDATE requests
+						SET agent_proccess = NULL
+						WHERE request_id = $1;`,
+					id,
+				)
+				if err != nil {
+					loggerErr.Println("Паника:", err)
+					logger.Println("Критическая ошибка, завершаем работу программы...")
+					logger.Println("Отправляем сигнал прерывания...")
+					ServerExitChannel <- os.Interrupt
+					logger.Println("Отправили сигнал прерывания.")
+					return
 				}
 				mu.Lock()
 				m.Agents[i] = 1
