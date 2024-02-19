@@ -15,6 +15,12 @@ curl -X GET http://127.0.0.1:8080/calculator/checkexpression?id=1
 Get expressions
 curl -X GET http://127.0.0.1:8080/calculator/getexpressions --output -
 
+Get times
+Почему-то у меня команда curl не позволяет передать несколько параматров, будет учитываться только первый. Если открывать ссылку в браузере, все работает нормально
+curl -X GET http://127.0.0.1:8080/calculator/values?[sum=...|sub=...|mult=...|div=...|timeout=...]
+curl -X GET http://127.0.0.1:8080/calculator/values?sum=200ms
+curl -X GET http://127.0.0.1:8080/calculator/values
+http://127.0.0.1:8080/calculator/values?sum=200ms&sub=200m&timeout=5500ms
 
 Shutdown
 cmd/shutdown/shutdown.go

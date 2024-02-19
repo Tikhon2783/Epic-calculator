@@ -34,6 +34,7 @@ var (
 	Srv               *http.Server
 	manager           *AgentsManager
 	mu                *sync.RWMutex
+	agentsTimeout     *time.Duration
 )
 
 // Структура для мониторинга агентов
@@ -42,6 +43,7 @@ type AgentsManager struct {
 	// AgentsFree   []int                 	 // Свободные агенты
 	Hb           map[int]<-chan struct{} // Канал хартбитов
 	HbTime       map[int]time.Time       // Мапа с временем последних хартбитов
+	HbTimeout    map[int]time.Duration   // Мапа с временем таймаутов для каждого агента
 	TaskInformer map[int]chan<- int      // Мапа каналов передачи выражения агенту
 	ResInformer  map[int]<-chan bool     // Мапа каналов оповещения о посчитанном выражении
 	Ctx          map[int]context.CancelFunc
@@ -55,6 +57,7 @@ func newAgentsManager() *AgentsManager {
 		// AgentsFree:   make([]int, vars.N_agents),
 		Hb:           make(map[int]<-chan struct{}),
 		HbTime:       make(map[int]time.Time),
+		HbTimeout:    make(map[int]time.Duration),
 		TaskInformer: make(map[int]chan<- int),
 		ResInformer:  make(map[int]<-chan bool),
 		Ctx:          make(map[int]context.CancelFunc),
@@ -72,12 +75,14 @@ func NewAgentComm(i int, m *AgentsManager) *agent.AgentComm {
 	m.Ctx[i] = ctxAgentCancel
 	m.Hb[i] = hb
 	m.HbTime[i] = time.Now()
+	m.HbTimeout[i] = *agentsTimeout
 	m.TaskInformer[i] = ti
 	m.ResInformer[i] = ri
 	return &agent.AgentComm{
 		N:            i,
 		Ctx:          ctxAgent,
 		Heartbeat:    hb,
+		Timeout:      *agentsTimeout,
 		TaskInformer: ti,
 		ResInformer:  ri,
 		N_machines:   vars.N_machines,
@@ -312,8 +317,8 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		exps     [][4]string = [][4]string{{"ID", "выражение", "рез-т", "агент"}}
-		id int
+		exps     [][]string = [][]string{{"ID", "выражение", "рез-т", "агент"}}
+		id       int
 		exp      string
 		finished bool
 		res      string
@@ -333,15 +338,15 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 
 		if !finished {
 			if agent == -1 {
-				exps = append(exps, [4]string{fmt.Sprint(id), exp, "не подсчитано", "в очереди"})
+				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", "в очереди"})
 			} else {
-				exps = append(exps, [4]string{fmt.Sprint(id), exp, "не подсчитано", fmt.Sprintf("агент %v", agent)})
+				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", fmt.Sprintf("агент %v", agent)})
 			}
 		} else {
 			if errors {
-				exps = append(exps, [4]string{fmt.Sprint(id), exp, "ошибка", fmt.Sprintf("агент %v", agent)})
+				exps = append(exps, []string{fmt.Sprint(id), exp, "ошибка", fmt.Sprintf("агент %v", agent)})
 			} else {
-				exps = append(exps, [4]string{fmt.Sprint(id), exp, res, fmt.Sprintf("агент %v", agent)})
+				exps = append(exps, []string{fmt.Sprint(id), exp, res, fmt.Sprintf("агент %v", agent)})
 			}
 		}
 	}
@@ -359,8 +364,8 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func printTable(table [][4]string, w http.ResponseWriter) {
-	columnLengths := make([]int, 4)
+func printTable(table [][]string, w http.ResponseWriter) {
+	columnLengths := make([]int, len(table[0]))
 	for _, line := range table {
 		for i, val := range line {
 			columnLengths[i] = max(len(val), columnLengths[i])
@@ -396,9 +401,133 @@ func printTable(table [][4]string, w http.ResponseWriter) {
 	}
 }
 
-func TimeValues(w http.ResponseWriter, r *http.Request) {}
+func TimeValues(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Оркестратор: непредвиденная ПАНИКА при обработки запроса на значения времени.")
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
 
-// func GetHeartbeat(w http.ResponseWriter, r *http.Request) {}
+	logger.Println("Оркестратор получил запрос на получение/изменение значений времени.")
+	// Метод должен быть GET
+	if r.Method != http.MethodGet {
+		logger.Println("Неправильный метод, выражение не обрабатывается.")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Получаем аргументы запроса
+	tSum := r.URL.Query().Get("sum")
+	tSub := r.URL.Query().Get("sub")
+	tMult := r.URL.Query().Get("mult")
+	tDiv := r.URL.Query().Get("div")
+	tAgent := r.URL.Query().Get("timeout")
+
+	fmt.Print("'")
+	fmt.Print(strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '")) // Ghjdthrf
+	fmt.Print("'\n")
+
+	// Изменяем значения
+	for i, val := range []string{tSum, tSub, tMult, tDiv, tAgent} {
+		if val == "" {
+			continue
+		}
+		fmt.Printf("'%s'\n", val)
+		t, err := time.ParseDuration(val)
+		if err != nil {
+			logger.Println("Оркестратор: ошибка парсинга времени")
+			loggerErr.Printf(
+				"Оркестратор: ошибка парсинга (%s): %s",
+				t,
+				err,
+			)
+			continue
+		}
+		if t < 0 {
+			fmt.Fprintf(
+				w, 
+				"Время на %s было введено отрицательное, прпускаем...",
+				[]string{"сложение", "вычитание", "умножение", "деление", "таймаут"}[i],
+			)
+			continue
+		}
+		_, err = db.Exec(
+			`UPDATE time_vars
+				SET time = $2
+				WHERE action = $1`,
+			[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
+			t/1000000,
+		)
+		if err != nil {
+			logger.Println("Оркестратор: ошибка изменения значения в БД")
+			loggerErr.Printf(
+				"Оркестратор: ошибка изменения значения %s на %s в БД: %s",
+				err,
+				[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
+				t,
+			)
+		}
+	}
+
+	// Получаем значения
+	times := getTimes()
+	printTable([][]string{
+		{"операция", "время"},
+		{"сложение", fmt.Sprint(times.Sum)},
+		{"вычитание", fmt.Sprint(times.Sub)},
+		{"умножение", fmt.Sprint(times.Mult)},
+		{"деление", fmt.Sprint(times.Div)},
+		}, w)
+}
+
+func getTimes() *agent.Times {
+	rows, err := db.Query("SELECT action, time from time_vars;")
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	t := &agent.Times{}
+	for rows.Next() {
+		var (
+			t_type string
+			t_time int
+		)
+		err := rows.Scan(&t_type, &t_time)
+		if err != nil {
+			log.Fatal(err)
+		}
+		switch t_type {
+		case "summation":
+			t.Sum = time.Duration(t_time * 1000000)
+			logger.Printf("Время на сложение:, %v\n", t.Sum)
+			// fmt.Fprintf(w, "Время на сложение:, %v\n", t.Sum)
+		case "substraction":
+			t.Sub = time.Duration(t_time * 1000000)
+			logger.Printf("Время на вычитание:, %v\n", t.Sub)
+			// fmt.Fprintf(w, "Время на вычитание:, %v\n", t.Sub)
+		case "multiplication":
+			t.Mult = time.Duration(t_time * 1000000)
+			logger.Printf("Время на умножение:, %v\n", t.Mult)
+			// fmt.Fprintf(w, "Время на умножение:, %v\n", t.Mult)
+		case "division":
+			t.Div = time.Duration(t_time * 1000000)
+			logger.Printf("Время на деление:, %v\n", t.Div)
+			// fmt.Fprintf(w, "Время на деление:, %v\n", t.Div)
+		case "agent_timeout":
+			t.AgentTimeout = time.Duration(t_time * 1000000)
+			logger.Printf("Таймаут агентов — %v\n", t.AgentTimeout)
+			// fmt.Fprintf(w, "Таймаут агентов — %v\n", t.AgentTimeout)
+			agentsTimeout = &t.AgentTimeout
+		}
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return t
+}
 
 func Launch() {
 	logger.Println("Подключился оркестратор.")
@@ -472,6 +601,7 @@ func Launch() {
 		logger.Println("Отправили сигнал прерывания.")
 	}
 
+	getTimes()
 	mu = &sync.RWMutex{}
 	manager = newAgentsManager() // Мониторинг агентов для запущенного оркестратора
 
@@ -482,9 +612,9 @@ func Launch() {
 		fmt.Fprintln(w, "Куда-то ты не туда забрёл...")
 	})
 	mux.Handle("/calculator/sendexpression", validityMiddleware(http.HandlerFunc(handleExpression))) // Принять выражение
-	mux.HandleFunc("/calculator/checkexpression", checkExpHandler)					// Узнать статус выражения
-	mux.HandleFunc("/calculator/getexpressions", getExpHandler)						// Получить список всех выражений
-	mux.HandleFunc("/calculator/values", TimeValues)								// Получение списка доступных операций со временем их выполения
+	mux.HandleFunc("/calculator/checkexpression", checkExpHandler)                                   // Узнать статус выражения
+	mux.HandleFunc("/calculator/getexpressions", getExpHandler)                                      // Получить список всех выражений
+	mux.HandleFunc("/calculator/values", TimeValues)                                                 // Получение списка доступных операций со временем их выполения
 	// mux.HandleFunc("/calculator/heartbeats", GetHeartbeat)        // Хартбиты (пинги) от агентов
 
 	// Сам http сервер оркестратор
@@ -643,7 +773,7 @@ func MonitorAgents(m *AgentsManager) {
 					n++
 				}
 			default:
-				if time.Since(m.HbTime[i]) > vars.T_agentTimeout { // Агент не посылал хартбиты слишком долго
+				if time.Since(m.HbTime[i]) > m.HbTimeout[i] { // Агент не посылал хартбиты слишком долго
 					loggerHB.Printf("Оркестратор - агент %v умер (таймаут).\n", i)
 					m.Ctx[i]()
 					close(m.TaskInformer[i])

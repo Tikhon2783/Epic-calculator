@@ -27,12 +27,12 @@ var (
 	pulse     *time.Ticker
 )
 
-type times struct {
-	sum          time.Duration
-	sub          time.Duration
-	mult         time.Duration
-	div          time.Duration
-	agentTimeout time.Duration
+type Times struct {
+	Sum          time.Duration
+	Sub          time.Duration
+	Mult         time.Duration
+	Div          time.Duration
+	AgentTimeout time.Duration
 }
 
 // Структура агента
@@ -40,6 +40,7 @@ type AgentComm struct {
 	N            int
 	Ctx          context.Context
 	Heartbeat    chan<- struct{}
+	Timeout		 time.Duration
 	TaskInformer <-chan int
 	ResInformer  chan<- bool
 	N_machines   int
@@ -63,8 +64,7 @@ func Agent(a *AgentComm) {
 	wg := sync.WaitGroup{}
 
 	// Готовим пинги
-	timesNow := *getTimes(a.N)
-	pulse = time.NewTicker(min(timesNow.agentTimeout, time.Second))
+	pulse = time.NewTicker(min(a.Timeout, time.Second))
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -158,7 +158,7 @@ func Agent(a *AgentComm) {
 		chRes := make(chan [4]float32) // Канал для получения значений от вычислителей
 		
 		for {
-			
+			timesNow := *getTimes(a.N)
 			expParts := make(map[[3]int]string) // Мапа для мониторинга статусов частей выражения
 			// ^ ключ - координаты, значение - делитель(1), множитель (2) или сложение (-1)
 			// partStatus := make(map[[2]int]bool) // Мапа для мониторинга статусов чисел
@@ -499,13 +499,13 @@ func (a *Arr) Pop() (int, bool) {
 	return n, true
 }
 
-func getTimes(n int) *times {
+func getTimes(n int) *Times {
 	rows, err := db.Query("SELECT action, time from time_vars;")
 	if err != nil {
 		panic(err)
 	}
 	defer rows.Close()
-	t := &times{}
+	t := &Times{}
 	for rows.Next() {
 		var (
 			t_type string
@@ -517,20 +517,20 @@ func getTimes(n int) *times {
 		}
 		switch t_type {
 		case "summation":
-			t.sum = time.Duration(t_time * 1000000)
-			logger.Printf("Время на сложение агента %v:, %v\n", n, t.sum)
+			t.Sum = time.Duration(t_time * 1000000)
+			logger.Printf("Время на сложение агента %v:, %v\n", n, t.Sum)
 		case "substraction":
-			t.sub = time.Duration(t_time * 1000000)
-			logger.Printf("Время на вычитание агента %v:, %v\n", n, t.sub)
+			t.Sub = time.Duration(t_time * 1000000)
+			logger.Printf("Время на вычитание агента %v:, %v\n", n, t.Sub)
 		case "multiplication":
-			t.mult = time.Duration(t_time * 1000000)
-			logger.Printf("Время на умножение агента %v:, %v\n", n, t.mult)
+			t.Mult = time.Duration(t_time * 1000000)
+			logger.Printf("Время на умножение агента %v:, %v\n", n, t.Mult)
 		case "division":
-			t.div = time.Duration(t_time * 1000000)
-			logger.Printf("Время на деление агента %v:, %v\n", n, t.div)
+			t.Div = time.Duration(t_time * 1000000)
+			logger.Printf("Время на деление агента %v:, %v\n", n, t.Div)
 		case "agent_timeout":
-			t.agentTimeout = time.Duration(t_time * 1000000)
-			logger.Printf("Агент %v думает, что его таймаут — %v\n", n, t.agentTimeout)
+			t.AgentTimeout = time.Duration(t_time * 1000000)
+			logger.Printf("Агент %v думает, что его таймаут — %v\n", n, t.AgentTimeout)
 		}
 	}
 	err = rows.Err()
@@ -625,7 +625,7 @@ func floatsToInts(arr []float32) [3]int {
 	return [3]int{int(arr[0]), int(arr[1]), int(arr[2])}
 }
 
-func calcMult(v1, v2 string, pos [3]int, ch chan<- [4]float32, t times) (string, error) {
+func calcMult(v1, v2 string, pos [3]int, ch chan<- [4]float32, t Times) (string, error) {
 	switch string(v1[0]) {
 	case "/": // Первое число - делитель
 		switch string(v2[0]) {
@@ -634,14 +634,14 @@ func calcMult(v1, v2 string, pos [3]int, ch chan<- [4]float32, t times) (string,
 			if err != nil {
 				return "", err
 			}
-			go mult(vFloat1, vFloat2, intsToFloats(pos), ch, t.mult)
+			go mult(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
 			return "div", nil
 		default: // (a / b * c = a * (c / b))
 			vFloat1, vFloat2, err := convertStrsToFloat32(v1[1:], v2)
 			if err != nil {
 				return "", err
 			}
-			go div(vFloat2, vFloat1, intsToFloats(pos), ch, t.div)
+			go div(vFloat2, vFloat1, intsToFloats(pos), ch, t.Div)
 			return "mult", nil
 		}
 	default:
@@ -651,32 +651,32 @@ func calcMult(v1, v2 string, pos [3]int, ch chan<- [4]float32, t times) (string,
 			if err != nil {
 				return "", err
 			}
-			go div(vFloat1, vFloat2, intsToFloats(pos), ch, t.mult)
+			go div(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
 			return "mult", nil
 		default: // (a * (b * c))
 			vFloat1, vFloat2, err := convertStrsToFloat32(v1, v2)
 			if err != nil {
 				return "", err
 			}
-			go mult(vFloat1, vFloat2, intsToFloats(pos), ch, t.div)
+			go mult(vFloat1, vFloat2, intsToFloats(pos), ch, t.Div)
 			return "mult", nil
 		}
 	}
 }
 
-func calcSum(v1, v2 string, pos [3]int, ch chan<- [4]float32, t times) error {
+func calcSum(v1, v2 string, pos [3]int, ch chan<- [4]float32, t Times) error {
 	if string(v2[0]) == "-" {
 		vFloat1, vFloat2, err := convertStrsToFloat32(v1, v2[1:])
 		if err != nil {
 			return err
 		}
-		go sub(vFloat1, vFloat2, intsToFloats(pos), ch, t.mult)
+		go sub(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
 	} else {
 		vFloat1, vFloat2, err := convertStrsToFloat32(v1, v2)
 		if err != nil {
 			return err
 		}
-		go sum(vFloat1, vFloat2, intsToFloats(pos), ch, t.mult)
+		go sum(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
 	}
 	return nil
 }
