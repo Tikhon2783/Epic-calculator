@@ -16,7 +16,7 @@ import (
 	// "errors"
 
 	"calculator/backend/cmd/agent"
-	"calculator/cmd"
+	shared "calculator/cmd"
 	"calculator/vars"
 
 	"github.com/jackc/pgx"
@@ -252,7 +252,7 @@ func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 		finished bool
 		res      string
 		errors   bool
-		agent	 int
+		agent    int
 	)
 	logger.Println("Hello postgresql")
 	err = db.QueryRow(
@@ -283,7 +283,118 @@ func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getExpHandler(w http.ResponseWriter, r *http.Request) {}
+func getExpHandler(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Оркестратор: непредвиденная ПАНИКА при получении статуса выражения.")
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+		logger.Println("Оркестратор обработал запрос на получение списка выражений.")
+	}()
+
+	logger.Println("Оркестратор получил запрос на получение списка выражений.")
+
+	// Метод должен быть GET
+	if r.Method != http.MethodGet {
+		logger.Println("Неправильный метод, выражение не обрабатывается.")
+		http.Error(w, `зачем ты сюда постишь, здесь получают список выражений.
+		 Тебе не обязательно посылать запросы вручную у меня есть специальный скрипт, в readme это описано.
+		 Хотя круто, что кому то не лень самому здесь копаться, спасибо`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	rows, err := db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests")
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Printf("Оркестратор: ошибка получения выражений из базы данных: %s", err)
+		http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
+		return
+	}
+	var (
+		exps     [][4]string = [][4]string{{"ID", "выражение", "рез-т", "агент"}}
+		id int
+		exp      string
+		finished bool
+		res      string
+		errors   bool
+		agent    int
+		failed   int
+	)
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&id, &exp, &finished, &res, &errors, &agent)
+		if err != nil {
+			logger.Println("Не смогли получить ряд из таблицы с выражениями, записываем, продолжаем получать ряды")
+			loggerErr.Printf("Оркестратор: ошибка получения выражения из базы данных: %s", err)
+			failed++
+			continue
+		}
+
+		if !finished {
+			if agent == -1 {
+				exps = append(exps, [4]string{fmt.Sprint(id), exp, "не подсчитано", "в очереди"})
+			} else {
+				exps = append(exps, [4]string{fmt.Sprint(id), exp, "не подсчитано", fmt.Sprintf("агент %v", agent)})
+			}
+		} else {
+			if errors {
+				exps = append(exps, [4]string{fmt.Sprint(id), exp, "ошибка", fmt.Sprintf("агент %v", agent)})
+			} else {
+				exps = append(exps, [4]string{fmt.Sprint(id), exp, res, fmt.Sprintf("агент %v", agent)})
+			}
+		}
+	}
+	printTable(exps, w)
+	if failed != 0 {
+		fmt.Fprintln(w, "Не удалось получить", failed, "строк.")
+	}
+	err = rows.Err()
+	if err != nil {
+		logger.Println("Ошибка со строками.")
+		loggerErr.Printf("Оркестратор: ошибка получения строк из базы данных: %s", err)
+		// http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func printTable(table [][4]string, w http.ResponseWriter) {
+	columnLengths := make([]int, 4)
+	for _, line := range table {
+		for i, val := range line {
+			columnLengths[i] = max(len(val), columnLengths[i])
+		}
+	}
+
+	var lineLength int = 1 // +1 для последней границы "|" в ряду
+	for _, c := range columnLengths {
+		lineLength += c + 3 // +3 для доп символов: "| %s "
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Server does not support Flusher!",
+			http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "+%s+\n", strings.Repeat("-", lineLength-2)) // Верхняя граница
+	flusher.Flush()
+	for i, line := range table {
+		for j, val := range line {
+			fmt.Fprintf(w, "| %-*s ", columnLengths[j], val)
+			if j == len(line)-1 {
+				fmt.Fprintf(w, "|\n")
+				flusher.Flush()
+			}
+		}
+		if i == 0 || i == len(table)-1 { // Заголовок или нижняя граница
+			fmt.Fprintf(w, "+%s+\n", strings.Repeat("-", lineLength-2))
+			flusher.Flush()
+		}
+	}
+}
 
 func TimeValues(w http.ResponseWriter, r *http.Request) {}
 
@@ -371,9 +482,9 @@ func Launch() {
 		fmt.Fprintln(w, "Куда-то ты не туда забрёл...")
 	})
 	mux.Handle("/calculator/sendexpression", validityMiddleware(http.HandlerFunc(handleExpression))) // Принять выражение
-	mux.HandleFunc("/calculator/checkexpression", checkExpHandler)                                   // Узнать статус выражения
-	mux.HandleFunc("/calculator/getexpressions", getExpHandler)                                       // Получить список всех выражений
-	mux.HandleFunc("/calculator/values", TimeValues)                                                 // Получение списка доступных операций со временем их выполения
+	mux.HandleFunc("/calculator/checkexpression", checkExpHandler)					// Узнать статус выражения
+	mux.HandleFunc("/calculator/getexpressions", getExpHandler)						// Получить список всех выражений
+	mux.HandleFunc("/calculator/values", TimeValues)								// Получение списка доступных операций со временем их выполения
 	// mux.HandleFunc("/calculator/heartbeats", GetHeartbeat)        // Хартбиты (пинги) от агентов
 
 	// Сам http сервер оркестратор

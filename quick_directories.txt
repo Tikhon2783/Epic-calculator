@@ -8,8 +8,11 @@ curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=0&expression
 curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=2&expression=1%2A2%2B3%2F3"
 curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=3&expression=1%2A2%2B3%2F0%2A5-1" // деление на ноль
 
-Get expression
+Find expression
 curl -X GET http://127.0.0.1:8080/calculator/checkexpression?id=1
+
+Get expressions
+curl -X GET http://127.0.0.1:8080/calculator/getexpressions --output -
 
 Shutdown
 cmd/shutdown/shutdown.go
