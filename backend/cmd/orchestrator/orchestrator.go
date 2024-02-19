@@ -143,7 +143,7 @@ func validityMiddleware(next http.Handler) http.Handler {
 		logger.Println("Bye postgresql")
 		if exists {
 			logger.Println("Выражение с повторяющимся ключем идемпотентности, возвращаем код 200.")
-			fmt.Fprint(w, http.StatusText(200), " Выражение уже было принято к обработке")
+			fmt.Fprint(w, http.StatusText(200), "Выражение уже было принято к обработке")
 			return
 		}
 
@@ -186,7 +186,7 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	if _, ok := manager.TaskIds.Pop(); ok {
 		logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
 		manager.TaskIds.Append(id)
-		fmt.Fprint(w, http.StatusText(200), " Выражение поставленно в очередь")
+		fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
 		return
 	}
 	logger.Println("Ищем свободного агента...")
@@ -202,7 +202,7 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			logger.Printf("Выражение отдано агенту %v, возвращем код 200.", i)
-			fmt.Fprintf(w, http.StatusText(200), " Выражение принято на обработку агентом %v", i)
+			fmt.Fprintf(w, http.StatusText(200), "Выражение принято на обработку агентом %v", i)
 			return
 		}
 	}
@@ -234,13 +234,13 @@ func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	logger.Println("Hello postgresql")
 	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1)", id).Scan(&exists)
+	logger.Println("Bye postgresql")
 	if err != nil {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-		loggerErr.Println("Оркестратор: ошибка проверки ключа в базе данных.")
+		loggerErr.Println("Оркестратор: ошибка проверки ключа в базе данных:", err)
 		http.Error(w, "Ошибка проверки ключа в базе данных", http.StatusInternalServerError)
 		return
 	}
-	logger.Println("Bye postgresql")
 	if !exists {
 		logger.Println("Выражение с полученным ID не найдено.")
 		fmt.Fprint(w, "Выражение с полученным ID не найдено.")
@@ -257,12 +257,12 @@ func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Hello postgresql")
 	err = db.QueryRow(
 		`SELECT expression, calculated, result, errors, agent_proccess FROM requests
-			WHERE request_id=$1)`,
+			WHERE request_id=$1;`,
 		id,
 	).Scan(&exp, &finished, &res, &errors, &agent)
 	if err != nil {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-		loggerErr.Printf("Оркестратор: ошибка получения выражения по ключу %s из базы данных.", id)
+		loggerErr.Printf("Оркестратор: ошибка получения выражения по ключу %s из базы данных: %s", id, err)
 		http.Error(w, "Ошибка получения выражения по ключу из базы данных.", http.StatusInternalServerError)
 		return
 	}
@@ -589,12 +589,12 @@ func MonitorAgents(m *AgentsManager) {
 					logger.Println("Отправили сигнал прерывания.")
 					return
 				}
-				_, err = db.Exec(
-					`UPDATE requests
-						SET agent_proccess = NULL
-						WHERE request_id = $1;`,
-					id,
-				)
+				// _, err = db.Exec(
+				// 	`UPDATE requests
+				// 		SET agent_proccess = NULL
+				// 		WHERE request_id = $1;`,
+				// 	id,
+				// )
 				if err != nil {
 					loggerErr.Println("Паника:", err)
 					logger.Println("Критическая ошибка, завершаем работу программы...")

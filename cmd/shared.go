@@ -89,17 +89,18 @@ func GetDebugLogger() *log.Logger {
 	case 1:
 		f, err := os.OpenFile("backend/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
         if err != nil {
-            log.Println("Failed to open file for logger, logging to stdout only.")
-            return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
+            log.Println(`Не смогли открыть файл для логгера дебага, логи записаны не будут.
+			Укажите Stdout в качестве вывода, чтобы выводить логи в консоль`)
+            f = nil
         }
         OpenFiles = append(OpenFiles, f)
         writer := bufio.NewWriter(f)
         go autoFlushBuffer(writer)
         return log.New(writer, "", vars.LoggerFlagsDebug)
 	case 2:
-		f, err := os.Create("backend/logs/debug.txt")
+		f, err := os.OpenFile("backend/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
-			log.Println("Не смогли открыть файл для логгера, будет использоваться только Stdout.")
+			log.Println("Не смогли открыть файл для логгера дебага, будет использоваться только Stdout.")
 			f = nil
 		}
 		OpenFiles = append(OpenFiles, f)

@@ -84,18 +84,19 @@ func main() {
 		fmt.Println("WHAT")
 	}
 	db.Close()
-	time.Sleep(time.Second)
+	logger.Println(shared.OpenFiles)
+	time.Sleep(time.Millisecond * 1010)
 	for _, f := range shared.OpenFiles {
 		logger.Println("А файл то пустой", f.Name())
 		if f != nil {
-			logger.Println("Закрываем файл", f.Name())
+			log.Println("Закрываем файл", f.Name())
 			err = f.Close()
 			if err != nil {
-				loggerErr.Println(err)
+				log.Println(err)
 			}
 		}
 	}
-	logger.Print("Программа завершенна.")
+	// log.Print("Программа завершенна.")
 	fmt.Print("Программа завершенна.")
 	os.Exit(0)
 }
@@ -166,7 +167,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				calculated boolean DEFAULT FALSE,
 				result varchar,
 				errors boolean DEFAULT FALSE,
-				agent_proccess integer UNIQUE
+				agent_proccess integer
 				);`,
 			)
 			if err != nil {
@@ -183,7 +184,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS agent_proccesses (
 				request_id integer references requests(request_id),
-				proccess_id integer PRIMARY KEY references requests(agent_proccess),
+				proccess_id integer PRIMARY KEY,
 				expression varchar(1000) NOT NULL,
 				parts varchar(2000),
 				parts_results varchar[],
