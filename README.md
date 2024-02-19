@@ -85,9 +85,9 @@
 ***
 ##### База данных
 База данных состоит из трех таблиц: таблица с выражениями, таблицы с процессами и таблицы со временем.  
-   ![Схема](https://github.com/Tikhon2783/Epic-calculator/tree/master/pictures/tableentire.png "Схема")   
-   ![Таблица выражений](https://github.com/Tikhon2783/Epic-calculator/tree/master/pictures/tablerequests.png "Таблица выражений")   
-   ![Таблица процессов](https://github.com/Tikhon2783/Epic-calculator/tree/master/pictures/tableproccesses.png "Таблица процессов")   
+   ![Схема](./pictures/tableentire.png "Схема")   
+   ![Таблица выражений](./pictures/tablerequests.png "Таблица выражений")   
+   ![Таблица процессов](./pictures/tableproccesses.png "Таблица процессов")   
 
 ##### Оркестратор
 
