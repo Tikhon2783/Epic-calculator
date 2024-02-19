@@ -1,18 +1,20 @@
 Startup
 cmd/startup/startup.go
 
-Send expression
-curl http://127.0.0.1:8080/calculator/sendexpression
+Send expressionn
+curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=_ID_HERE_&expression=_EXPRESSION_HERE_"
 curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=1&expression=1%2B2%2B3"  // 1+2+3 + 6
 curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=0&expression=2-1%2A3"    // 2-1*3 = -1
 curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=2&expression=1%2A2%2B3%2F3"
 curl -X POST http://127.0.0.1:8080/calculator/sendexpression -d "id=3&expression=1%2A2%2B3%2F0%2A5-1" // деление на ноль
 
 Find expression
+curl -X GET http://127.0.0.1:8080/calculator/checkexpression?id=_ID_HERE_
 curl -X GET http://127.0.0.1:8080/calculator/checkexpression?id=1
 
 Get expressions
 curl -X GET http://127.0.0.1:8080/calculator/getexpressions --output -
+
 
 Shutdown
 cmd/shutdown/shutdown.go
