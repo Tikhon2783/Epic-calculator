@@ -143,7 +143,7 @@ func validityMiddleware(next http.Handler) http.Handler {
 		logger.Println("Bye postgresql")
 		if exists {
 			logger.Println("Выражение с повторяющимся ключем идемпотентности, возвращаем код 200.")
-			fmt.Fprint(w, http.StatusText(200), "Выражение уже было принято к обработке")
+			fmt.Fprint(w, http.StatusText(200), " Выражение уже было принято к обработке")
 			return
 		}
 
@@ -174,7 +174,7 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	vals := r.Context().Value(myKey).([2]myKeys)
 	id, exp := vals[0].(int), vals[1].(string)
 
-	_, err = db.Exec("orchestratorPut", id, exp)
+	_, err = db.Exec("orchestratorPut", id, exp, -1)
 	if err != nil {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 		loggerErr.Printf("Оркестратор: ошибка записи выражения в таблицу с выражениями: %s.", err)
@@ -186,7 +186,7 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	if _, ok := manager.TaskIds.Pop(); ok {
 		logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
 		manager.TaskIds.Append(id)
-		fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
+		fmt.Fprint(w, http.StatusText(200), " Выражение поставленно в очередь")
 		return
 	}
 	logger.Println("Ищем свободного агента...")
@@ -194,32 +194,15 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	// Ищем свободного агента
 	for i := 1; i < vars.N_agents+1; i++ {
 		if manager.Agents[i] == 1 {
-			logger.Println(i, "агент свободен.")
-			_, err = db.Exec(
-				`UPDATE requests
-					SET agent_proccess = $2
-					WHERE request_id = $1;`,
-				id,
-				i,
-			)
-			logger.Println("Hello again!")
+			err = giveTaskToAgent(i, id)
 			if err != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями:", err)
 				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
 				return
 			}
-			logger.Printf("Отдаем выражение агенту %v.", i)
-			manager.Agents[i] = 2
-			select {
-			case manager.TaskInformer[i] <- id:
-				logger.Printf("Выражение отдано агенту %v.", i)
-			default:
-				logger.Printf("Не смогли отдать выражение агенту %v.", i)
-			}
-			// mu.RUnlock()
 			logger.Printf("Выражение отдано агенту %v, возвращем код 200.", i)
-			fmt.Fprint(w, http.StatusText(200), "Выражение принято на обработку агентом")
+			fmt.Fprintf(w, http.StatusText(200), " Выражение принято на обработку агентом %v", i)
 			return
 		}
 	}
@@ -230,13 +213,77 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
 }
 
-type checkExpHandler struct{}
+func checkExpHandler(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Оркестратор: непредвиденная ПАНИКА при получении статуса выражения.")
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
 
-func (h *checkExpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+	logger.Println("Оркестратор получил запрос на получение статуса выражения.")
+	// Метод должен быть GET
+	if r.Method != http.MethodGet {
+		logger.Println("Неправильный метод, выражение не обрабатывается.")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
 
-type getExpHandler struct{}
+	var exists bool
+	id := r.URL.Query().Get("id")
+	logger.Println("Hello postgresql")
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1)", id).Scan(&exists)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+		loggerErr.Println("Оркестратор: ошибка проверки ключа в базе данных.")
+		http.Error(w, "Ошибка проверки ключа в базе данных", http.StatusInternalServerError)
+		return
+	}
+	logger.Println("Bye postgresql")
+	if !exists {
+		logger.Println("Выражение с полученным ID не найдено.")
+		fmt.Fprint(w, "Выражение с полученным ID не найдено.")
+		return
+	}
 
-func (h *getExpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+	var (
+		exp      string
+		finished bool
+		res      string
+		errors   bool
+		agent	 int
+	)
+	logger.Println("Hello postgresql")
+	err = db.QueryRow(
+		`SELECT expression, calculated, result, errors, agent_proccess FROM requests
+			WHERE request_id=$1)`,
+		id,
+	).Scan(&exp, &finished, &res, &errors, &agent)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
+		loggerErr.Printf("Оркестратор: ошибка получения выражения по ключу %s из базы данных.", id)
+		http.Error(w, "Ошибка получения выражения по ключу из базы данных.", http.StatusInternalServerError)
+		return
+	}
+	logger.Println("Bye postgresql")
+
+	if !finished {
+		logger.Println("Выражение успешно найдено, результат еще не получен.")
+		if agent == -1 {
+			fmt.Fprintf(w, "Выражение '%s' еще не посчитанно, все агенты заняты.", exp)
+		}
+		fmt.Fprintf(w, "Выражение '%s' еще считается. Номер агента — %v", exp, agent)
+	} else if errors {
+		logger.Printf("Выражение успешно найдено, в выражении была найдена ошибка. Считал агент %v", agent)
+		fmt.Fprintf(w, "В выражении '%s' есть ошибка, результат не может быть посчитан. Считал агент %v", exp, agent)
+	} else {
+		logger.Printf("Выражение успешно найдено, результат получен. Считал агент %v", agent)
+		fmt.Fprintf(w, "Выражение найдено! %s = %s. Старался агент %v :)", exp, res, agent)
+	}
+}
+
+func getExpHandler(w http.ResponseWriter, r *http.Request) {}
 
 func TimeValues(w http.ResponseWriter, r *http.Request) {}
 
@@ -253,8 +300,8 @@ func Launch() {
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
-		`INSERT INTO requests (request_id, expression)
-		VALUES ($1, $2);`,
+		`INSERT INTO requests (request_id, expression, agent_proccess)
+		VALUES ($1, $2, $3);`,
 	)
 	if err != nil {
 		loggerErr.Println("Паника:", err)
@@ -324,8 +371,8 @@ func Launch() {
 		fmt.Fprintln(w, "Куда-то ты не туда забрёл...")
 	})
 	mux.Handle("/calculator/sendexpression", validityMiddleware(http.HandlerFunc(handleExpression))) // Принять выражение
-	mux.Handle("/calculator/checkexpression", &checkExpHandler{})                                    // Узнать статус выражения
-	mux.Handle("/calculator/getexpressions", &getExpHandler{})                                       // Получить список всех выражений
+	mux.HandleFunc("/calculator/checkexpression", checkExpHandler)                                   // Узнать статус выражения
+	mux.HandleFunc("/calculator/getexpressions", getExpHandler)                                       // Получить список всех выражений
 	mux.HandleFunc("/calculator/values", TimeValues)                                                 // Получение списка доступных операций со временем их выполения
 	// mux.HandleFunc("/calculator/heartbeats", GetHeartbeat)        // Хартбиты (пинги) от агентов
 

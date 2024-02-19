@@ -15,7 +15,7 @@ const ( // Переменные для работы Postgres
 )
 
 const ( // Дефолтные временные переменные
-	T_sum	time.Duration = time.Millisecond * 500 // Время на выполнение сложения
+	T_sum	time.Duration = time.Millisecond * 5000 // Время на выполнение сложения
 	T_sub	time.Duration = time.Millisecond * 500 // Время на выполнение вычитания
 	T_mult	time.Duration = time.Millisecond * 500 // Время на выполнение умножения
 	T_div	time.Duration = time.Millisecond * 500 // Время на выполнение деления
