@@ -1,14 +1,14 @@
 # "Распределенный вычислитель арифметических выражений"
 
 ## Оглавление readme
-1. Что реализовано + контакты
-1. Как запускать
-    * Что установить
-    * Как пользоваться
-    * Что и как можно ломать
-1. Примеры
-1. Документация
-    1. Как все работает
+1. [Что реализовано + контакты](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D1%87%D1%82%D0%BE-%D1%80%D0%B5%D0%B0%D0%BB%D0%B8%D0%B7%D0%BE%D0%B2%D0%B0%D0%BD%D0%BE)
+1. [Как запускать](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D0%BA%D0%B0%D0%BA-%D0%B7%D0%B0%D0%BF%D1%83%D1%81%D0%BA%D0%B0%D1%82%D1%8C)
+    * [Что установить](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D1%87%D1%82%D0%BE-%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%B0%D0%B2%D0%BB%D0%B8%D0%B2%D0%B0%D1%82%D1%8C)
+    * [Как пользоваться](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D0%BA%D0%B0%D0%BA-%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D1%8C%D1%81%D1%8F)
+    * [Что и как можно ломать](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D1%87%D1%82%D0%BE-%D0%B8-%D0%BA%D0%B0%D0%BA-%D0%BC%D0%BE%D0%B6%D0%BD%D0%BE-%D0%BB%D0%BE%D0%BC%D0%B0%D1%82%D1%8C)
+1. [Примеры](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80%D1%8B)
+1. [Документация](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D0%B4%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F)
+    1. [Как все работает](https://github.com/Tikhon2783/Epic-calculator?tab=readme-ov-file#%D0%BF%D1%80%D0%B8%D0%BD%D1%86%D0%B8%D0%BF-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B)
     2. Логгеры
     3. Ошибки
 ---
@@ -32,7 +32,7 @@
 
    Для завершения работы можно убить оркестратора или просто отправить сигнал прерывания ^C – программа его распознает, закроет все, что было открыто и завершит работу. Если по какой-то причине оба варианта не сработают, придется открывать диспетчер задач, искать процесс startup.go и завершать его. Скриншот примера приложен. У меня такая проблема возникала только в самом начале, ^C сработает в 99% случаев. Если все-таки у вас возникнет эта ошибка, пожалуйста, напишите мне, чтобы я поправил, а вы и следующие проверяющие не страдали.  
 
-   ![taskmanager](https://github.com/Tikhon2783/Epic-calculator/tree/master/pictures/taskmanager.png "Программа в диспетчере задач")
+   ![taskmanager](..blob/master/pictures/taskmanager.png "Программа в диспетчере задач")
 
 
 ### Как запускать
