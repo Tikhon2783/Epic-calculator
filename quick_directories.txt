@@ -22,6 +22,15 @@ curl -X GET http://127.0.0.1:8080/calculator/values?sum=200ms
 curl -X GET http://127.0.0.1:8080/calculator/values
 http://127.0.0.1:8080/calculator/values?sum=200ms&sub=200m&timeout=5500ms
 
+Kill/revive agent
+curl -X GET http://127.0.0.1:8080/calculator/kill/agent?action={KILL or REVIVE}
+curl -X GET http://127.0.0.1:8080/calculator/kill/agent?action=kill
+curl -X GET http://127.0.0.1:8080/calculator/kill/agent?action=revive
+curl -X GET http://127.0.0.1:8080/calculator/kill/agent?action=unknownmethod
+
+Kill orchestrator
+curl http://127.0.0.1:8080/calculator/kill/orchestrator
+
 Shutdown
 cmd/shutdown/shutdown.go
 

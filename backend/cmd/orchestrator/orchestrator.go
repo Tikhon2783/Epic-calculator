@@ -71,6 +71,8 @@ func NewAgentComm(i int, m *AgentsManager) *agent.AgentComm {
 	hb := make(chan struct{})
 	ti := make(chan int, 1)
 	ri := make(chan bool)
+	mu.Lock()
+	defer mu.Unlock()
 	m.Agents[i] = 1
 	m.Ctx[i] = ctxAgentCancel
 	m.Hb[i] = hb
@@ -188,17 +190,19 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := manager.TaskIds.Pop(); ok {
+	if !manager.TaskIds.IsEmpty() {
 		logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
 		manager.TaskIds.Append(id)
 		fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
 		return
 	}
 	logger.Println("Ищем свободного агента...")
-	// mu.RLock()
 	// Ищем свободного агента
 	for i := 1; i < vars.N_agents+1; i++ {
-		if manager.Agents[i] == 1 {
+		mu.RLock()
+		agentStatus := manager.Agents[i]
+		mu.RUnlock()
+		if agentStatus == 1 {
 			err = giveTaskToAgent(i, id)
 			if err != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
@@ -211,7 +215,6 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// mu.RUnlock()
 
 	logger.Println("Все агенты заняты, кладем выражение в очередь.")
 	manager.TaskIds.Append(id)
@@ -447,7 +450,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 		}
 		if t < 0 {
 			fmt.Fprintf(
-				w, 
+				w,
 				"Время на %s было введено отрицательное, прпускаем...",
 				[]string{"сложение", "вычитание", "умножение", "деление", "таймаут"}[i],
 			)
@@ -479,7 +482,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 		{"вычитание", fmt.Sprint(times.Sub)},
 		{"умножение", fmt.Sprint(times.Mult)},
 		{"деление", fmt.Sprint(times.Div)},
-		}, w)
+	}, w)
 }
 
 func getTimes() *agent.Times {
@@ -529,15 +532,82 @@ func getTimes() *agent.Times {
 	return t
 }
 
+func KillHandler(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Оркестратор: непредвиденная ПАНИКА при обработки запроса на убийство агента.")
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
+
+	logger.Println("Оркестратор получил запрос на убийство агента.")
+	// Метод должен быть GET
+	if r.Method != http.MethodGet {
+		logger.Println("Неправильный метод, выражение не обрабатывается.")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Получаем аргументы запроса
+	act := r.URL.Query().Get("action")
+
+	if act == "kill" {
+		for i := 1; i < vars.N_agents+1; i++ {
+			mu.RLock()
+			agentStatus := manager.Agents[i]
+			mu.RUnlock()
+			if agentStatus != 0 {
+				logger.Printf("Оркестратор отключает агента %v.\n", i)
+				manager.Ctx[i]()
+				logger.Printf("Оркестратор отключил агента %v.\n", i)
+				fmt.Fprintf(w, "Оркестратор отключил агента %v.\n", i)
+				return
+			}
+		}
+		fmt.Fprintf(w, "Похоже, все агенты уже мертвы. Оркестратор не смог никого отключить.\n")
+	} else if act == "revive" {
+		for i := 1; i < vars.N_agents+1; i++ {
+			mu.RLock()
+			agentStatus := manager.Agents[i]
+			mu.RUnlock()
+			if agentStatus == 0 {
+				go agent.Agent(NewAgentComm(i, manager))
+				logger.Printf("Запланировали агента %v\n", i)
+				logger.Printf("Оркестратор подключил агента %v.\n", i)
+				fmt.Fprintf(w, "Оркестратор оживил агента %v.\n", i)
+				if !manager.TaskIds.IsEmpty() {
+					if t, ok := manager.TaskIds.Pop(); ok {
+						logger.Printf("Очередь не пустая, оркестратор дал агенту %v выражение с ID %v.\n", i, t)
+						err = giveTaskToAgent(i, t)
+						if err != nil {
+							loggerErr.Println("Паника:", err)
+							logger.Println("Критическая ошибка, завершаем работу программы...")
+							logger.Println("Отправляем сигнал прерывания...")
+							ServerExitChannel <- os.Interrupt
+							logger.Println("Отправили сигнал прерывания.")
+						}
+						return
+					}
+				}
+			}
+		}
+		fmt.Fprintf(w, "Похоже, все агенты уже живы. Оркестратор не смог никого подключить.\n")
+	} else {
+		logger.Println("Неправильный аргумент, выражение не обрабатывается.")
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+}
+
+
 func Launch() {
 	logger.Println("Подключился оркестратор.")
 	fmt.Println("Оркестратор передаёт привет :)")
 	db = shared.Db
-	// conn, err := db.Acquire()
-	// fmt.Println(conn, err)
-	// conn.Close()
-	// logger.Println("Hello!")
+
 	// Подготавливаем запросы в БД
+	// (&id, &exp, &finished, &res, &errors, &agent)
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
 		`INSERT INTO requests (request_id, expression, agent_proccess)
@@ -607,7 +677,8 @@ func Launch() {
 
 	// Настраиваем обработчики для разных путей
 	mux := http.NewServeMux()
-	mux.Handle("/calculator/kill", &SrvSelfDestruct{}) // Убийство сервера
+	mux.Handle("/calculator/kill/orchestrator", &SrvSelfDestruct{}) // Убийство сервера
+	mux.HandleFunc("/calculator/kill/agent", KillHandler)
 	mux.HandleFunc("/calculator", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "Куда-то ты не туда забрёл...")
 	})
@@ -676,16 +747,22 @@ func CheckWorkLeft(m *AgentsManager) {
 			logger.Println("Отправили сигнал прерывания.")
 		}
 
-		if _, ok := m.TaskIds.Pop(); ok {
-			logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
-			m.TaskIds.Append(id)
-			return
+		if !m.TaskIds.IsEmpty() {
+			if _, ok := m.TaskIds.Pop(); ok {
+				logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
+				m.TaskIds.Append(id)
+				return
+			} else {
+				loggerErr.Println("Слайс не пустой но пустой...")
+			}
 		}
 		logger.Println("Ищем свободного агента...")
-		mu.RLock()
 		// Ищем свободного агента
 		for i := 1; i < vars.N_agents+1; i++ {
-			if m.Agents[i] == 1 {
+			mu.RLock()
+			agentStatus := manager.Agents[i]
+			mu.RUnlock()
+			if agentStatus == 1 {
 				logger.Println(i, "агент свободен.")
 				err = giveTaskToAgent(i, id)
 				if err != nil {
@@ -696,9 +773,10 @@ func CheckWorkLeft(m *AgentsManager) {
 					logger.Println("Отправили сигнал прерывания.")
 				}
 				break
+			} else {
+				mu.RUnlock()
 			}
 		}
-		mu.RUnlock()
 	}
 	err = rows.Err()
 	if err != nil {
@@ -713,8 +791,8 @@ func CheckWorkLeft(m *AgentsManager) {
 
 func giveTaskToAgent(n, id int) error {
 	logger.Printf("Отдаем задачу с ID %v агенту %v...", id, n)
-	// mu.Lock()
-	// defer mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 	// fmt.Println(db)
 	// conn, err := db.Acquire()
 	// fmt.Println("Acquired connection!", err)
@@ -750,11 +828,11 @@ func MonitorAgents(m *AgentsManager) {
 		n = 0
 		for i := 1; i < vars.N_agents+1; i++ {
 			mu.RLock()
-			if m.Agents[i] == 0 { // Агент не записан как живой
-				mu.RUnlock()
+			agentStatus := manager.Agents[i]
+			mu.RUnlock()
+			if agentStatus == 0 { // Агент не записан как живой
 				continue
 			}
-			mu.RUnlock()
 			loggerHB.Printf("Оркестратор - проверка агента %v...\n", i)
 
 			// Проверяем, живой ли агент
@@ -763,6 +841,7 @@ func MonitorAgents(m *AgentsManager) {
 				if !ok {
 					loggerHB.Printf("Оркестратор - агент %v умер (закрыт канал хартбитов).\n", i)
 					m.Ctx[i]()
+					close(m.TaskInformer[i])
 					mu.Lock()
 					m.Agents[i] = 0
 					mu.Unlock()
@@ -784,7 +863,10 @@ func MonitorAgents(m *AgentsManager) {
 			}
 			// Проверяем, не посчитал ли агент свое выражение
 			select {
-			case ok := <-m.ResInformer[i]:
+			case ok, alive := <-m.ResInformer[i]:
+				if !alive {
+					continue
+				}
 				var id int
 				var res string
 				err = db.QueryRow("orchestratorReceive", i).Scan(&id, &res)
@@ -830,23 +912,27 @@ func MonitorAgents(m *AgentsManager) {
 					logger.Println("Отправили сигнал прерывания.")
 					return
 				}
-				// _, err = db.Exec(
-				// 	`UPDATE requests
-				// 		SET agent_proccess = NULL
-				// 		WHERE request_id = $1;`,
-				// 	id,
-				// )
-				if err != nil {
-					loggerErr.Println("Паника:", err)
-					logger.Println("Критическая ошибка, завершаем работу программы...")
-					logger.Println("Отправляем сигнал прерывания...")
-					ServerExitChannel <- os.Interrupt
-					logger.Println("Отправили сигнал прерывания.")
-					return
+				if !m.TaskIds.IsEmpty() {
+					if t, ok := m.TaskIds.Pop(); ok {
+						logger.Printf("Очередь выражений не пустая, отдаем агенту %v выражение с id %v.", i, t)
+						err = giveTaskToAgent(i, t)
+						if err != nil {
+							loggerErr.Println("Паника при попытке отдать агенту выражение:", err)
+							logger.Println("Критическая ошибка, завершаем работу программы...")
+							logger.Println("Отправляем сигнал прерывания...")
+							ServerExitChannel <- os.Interrupt
+							logger.Println("Отправили сигнал прерывания.")
+						}
+						return
+					} else {
+						loggerErr.Println("Слайс не пустой но пустой...")
+					}
+				} else {
+					logger.Printf("Очередь выражений пустая, агент %v отдыхает.", i)
+					mu.Lock()
+					m.Agents[i] = 1
+					mu.Unlock()
 				}
-				mu.Lock()
-				m.Agents[i] = 1
-				mu.Unlock()
 			default:
 			}
 
@@ -863,7 +949,6 @@ func MonitorAgents(m *AgentsManager) {
 	}
 }
 
-// Тестовый вариант "убийства" оркестратора, в разработке
 func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -873,19 +958,22 @@ func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
-	fmt.Println("The button has been pressed...")
-	for i := 10; i > 0; i-- {
-		_, err := fmt.Fprintf(w, "Self destruction in %v\n", i)
+	logger.Println("Получили запрос на убийство оркестратора. Оркестратор умрет через 5 секунд.")
+	fmt.Println("Запущено самоуничтожение севера...")
+	for i := 5; i > 0; i-- {
+		_, err := fmt.Fprintf(w, "Оркестратор умрет через %v\n", i)
 		flusher.Flush()
 		fmt.Println(i, err)
 		<-time.After(time.Second)
 	}
-	fmt.Fprintln(w, "KaBOOM!")
-	fmt.Println("Server is getting self destructed...")
+	fmt.Fprintln(w, "Бабах!")
+	logger.Println("Оркестратор умирает...")
+	fmt.Println("Оркестратор умер...")
 	flusher.Flush()
 	err = Srv.Close()
 	if err != nil {
-		loggerErr.Println("Failed to close Server:", err)
+		loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
-	logger.Println("Closed the Server.")
+	logger.Println("Закрыли HTTP сервер.")
 }

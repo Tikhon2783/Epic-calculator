@@ -353,7 +353,7 @@ func Agent(a *AgentComm) {
 						elem := newParts[i]
 						if len(elem) > 1 { // Однозначные элементы на данном этапе уже в слайсе 'comps'
 							var free Queue = &Arr{}
-							if _, ok := free.Pop(); ok {
+							if !free.IsEmpty() {
 								panic("- ERROR - free.pop() is wrong! - ERROR -")
 							}
 							logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
@@ -365,11 +365,15 @@ func Agent(a *AgentComm) {
 									logger.Printf("Агент %v: 2 множитель пустой, пропускаем итерацию %v.\n", a.N, j)
 									continue
 								} else if v1 == "" || v1 == "X" {
-									if index, ok := free.Pop(); ok {
-										v1 = elem[index]
-										pos = [3]int{i, index, j}
-										newParts[i][index] = "X"
-										newParts[i][j] = "X"
+									if !free.IsEmpty() {
+										if index, ok := free.Pop(); ok {
+											v1 = elem[index]
+											pos = [3]int{i, index, j}
+											newParts[i][index] = "X"
+											newParts[i][j] = "X"
+										} else {
+											loggerErr.Println("Слайс не пустой но пустой...")
+										}
 									} else {
 										free.Append(j)
 										logger.Printf("Агент %v: Не нашли пару ко 2 множителю, записываем, пропускаем итерацию %v.\n", a.N, j)
@@ -408,7 +412,7 @@ func Agent(a *AgentComm) {
 					logger.Printf("Агент %v начинает производить сложение слагаемых.\n", a.N)
 					logger.Println("Слайс слагаемых:", fmt.Sprint("[", strings.Join(comps, "'"), "]"))
 					var free Queue = &Arr{}
-					if _, ok := free.Pop(); ok {
+					if !free.IsEmpty() {
 						panic("- ERROR - free.pop() is wrong! - ERROR -")
 					}
 					for i := 1; i < len(comps); i += 2 {
@@ -420,14 +424,17 @@ func Agent(a *AgentComm) {
 							logger.Printf("Агент %v: 2 слагаемое пустое, пропускаем итерацию %v.\n", a.N, i)
 							continue
 						} else if v1 == "" || v1 == "X" {
-							if index, ok := free.Pop(); ok {
-								v1 = comps[index]
-								pos = [3]int{-1, index, i}
-								comps[index] = "X"
-								comps[i] = "X"
+							logger.Println("Первое слагаемое пустое")
+							if !free.IsEmpty() {
+								if index, ok := free.Pop(); ok {
+									v1 = comps[index]
+									pos = [3]int{-1, index, i}
+									comps[index] = "X"
+									comps[i] = "X"
+								}
 							} else {
-								free.Append(i)
 								logger.Printf("Агент %v: Не нашли пару ко 2 слагаемому, записываем, пропускаем итерацию %v.\n", a.N, i)
+								free.Append(i)
 								continue
 							}
 						} else {
@@ -475,6 +482,7 @@ func Agent(a *AgentComm) {
 type Queue interface {
 	Append(n int)
 	Pop() (int, bool)
+	IsEmpty() bool
 }
 
 type Arr struct {
@@ -497,6 +505,10 @@ func (a *Arr) Pop() (int, bool) {
 	n := a.arr[0]
 	a.arr = a.arr[1:]
 	return n, true
+}
+
+func (a *Arr) IsEmpty() bool {
+	return len(a.arr) == 0
 }
 
 func getTimes(n int) *Times {

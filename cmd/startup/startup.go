@@ -1,8 +1,6 @@
 package main
 
 import (
-	// "context"
-	// "database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,15 +9,12 @@ import (
 	"sync"
 	"time"
 
-	// "errors"
-
 	"calculator/backend/cmd/orchestrator"
 	"calculator/cmd"
 	"calculator/vars"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
-	// "github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
 )
 
@@ -165,15 +160,15 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				request_id integer PRIMARY KEY,
 				expression varchar(100) NOT NULL,
 				calculated boolean DEFAULT FALSE,
-				result varchar,
+				result varchar DEFAULT 0,
 				errors boolean DEFAULT FALSE,
-				agent_proccess integer
+				agent_proccess integer DEFAULT 0
 				);`,
 			)
 			if err != nil {
 				panic(err)
 			}
-			// db_info.T_requests = true
+			db_info.T_requests = true
 			logger.Println("Создали таблицу с запросами.")
 		}()
 	}
@@ -194,7 +189,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 			if err != nil {
 				panic(err)
 			}
-			// db_info.T_agent = true
+			db_info.T_agent = true
 			logger.Println("Создали таблицу с процессами агента.")
 			wg.Done()
 		}()

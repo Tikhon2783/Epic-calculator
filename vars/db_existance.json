@@ -2,5 +2,5 @@
 	"Db": true,
 	"T_requests": false,
 	"T_agent": false,
-	"T_vars": true
+	"T_vars": false
 }
