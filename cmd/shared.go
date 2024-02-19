@@ -50,8 +50,8 @@ func autoFlushBuffer(writer *bufio.Writer) {
 
     for {
         <-ticker.C
-		if err := writer.Flush(); err != nil {
-			log.Printf("Error flushing buffer: %v\n", err)
+		if err := writer.Flush(); err != nil && err != io.ErrShortWrite{
+			LoggerErr.Printf("Error flushing buffer: %v\n", err)
 		}
     }
 }

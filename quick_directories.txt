@@ -31,6 +31,9 @@ curl -X GET http://127.0.0.1:8080/calculator/kill/agent?action=unknownmethod
 Kill orchestrator
 curl http://127.0.0.1:8080/calculator/kill/orchestrator
 
+See agents monitor
+curl http://127.0.0.1:8080/calculator/monitor
+
 Shutdown
 cmd/shutdown/shutdown.go
 

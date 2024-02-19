@@ -15,7 +15,7 @@ const ( // Переменные для работы Postgres
 )
 
 const ( // Дефолтные временные переменные
-	T_sum	time.Duration = time.Millisecond * 5000 // Время на выполнение сложения
+	T_sum	time.Duration = time.Millisecond * 500 // Время на выполнение сложения
 	T_sub	time.Duration = time.Millisecond * 500 // Время на выполнение вычитания
 	T_mult	time.Duration = time.Millisecond * 500 // Время на выполнение умножения
 	T_div	time.Duration = time.Millisecond * 500 // Время на выполнение деления
@@ -26,12 +26,12 @@ var ( // Переменные для работы логгера
 	LoggerFlagsDebug int = log.Lshortfile | log.Ltime	// Флаги обычного логгера
 	LoggerFlagsError int = log.Lshortfile | log.Ltime	// Флаги логгера ошибок
 	LoggerFlagsPings int = log.Ltime					// Флаги логгера хартбитов
-	LoggerOutputDebug int = 0		// Вывод обычного логгера (0: Stdout, 1: backendlogs/debug.txt, 2: Stdout + debug.txt)
-	LoggerOutputError int = 2			// Вывод логгера ошибок (0: Stderr, 1: backendlogs/errors.txt, 2: Stderr + errors.txt)
-	LoggerOutputPings int = 1	// Вывод логгера ошибок (0: Stdout, 1: backendlogs/heartbeats.txt, 2: Stdout + heartbeats.txt)
+	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: backendlogs/debug.txt, 2: Stdout + debug.txt)
+	LoggerOutputError int = 2		// Вывод логгера ошибок (0: Stderr, 1: backendlogs/errors.txt, 2: Stderr + errors.txt)
+	LoggerOutputPings int = 1		// Вывод логгера ошибок (0: Stdout, 1: backendlogs/heartbeats.txt, 2: Stdout + heartbeats.txt)
 )
 
 const (
-	N_agents int = 1	// Количество поднимаемых агентов
+	N_agents int = 3	// Количество поднимаемых агентов
 	N_machines int = -1	// Количество поднимаемых вычеслителей-горутин на агента (-1 если можно поднимать сколько нужно без ограничений)
 )

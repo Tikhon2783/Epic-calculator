@@ -1,0 +1,85 @@
+
+НОВАЯ СЕССИЯ
+16:45:48 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+16:47:45 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+
+НОВАЯ СЕССИЯ
+16:48:28 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+16:50:43 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+16:56:00 agent.go:311: Агент 1: в выражении присутствует деление на ноль.
+16:57:19 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+
+НОВАЯ СЕССИЯ
+16:58:37 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:03:02 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:09:07 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:09:33 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:10:07 agent.go:312: Агент 1: в выражении присутствует деление на ноль.
+17:10:46 agent.go:146: Перехватили панику агента 1: - ERROR - Got unknown type! - ERROR -
+— Отключаем агента 1...
+17:11:17 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:14:46 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+
+НОВАЯ СЕССИЯ
+17:19:08 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:20:09 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:21:46 agent.go:312: Агент 2: в выражении присутствует деление на ноль.
+17:22:22 agent.go:146: Перехватили панику агента 2: - ERROR - Got unknown type! - ERROR -
+— Отключаем агента 2...
+17:22:50 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+
+НОВАЯ СЕССИЯ
+17:31:54 agent.go:146: Перехватили панику агента 3: ОШИБКА: повторяющееся значение ключа нарушает ограничение уникальности "agent_proccesses_pkey" (SQLSTATE 23505)
+— Отключаем агента 3...
+17:32:02 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:40:29 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:44:18 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:47:49 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:50:44 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+17:56:48 orchestrator.go:715: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+
+НОВАЯ СЕССИЯ
+18:12:01 orchestrator.go:727: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+18:14:09 orchestrator.go:727: HTTP сервер накрылся: http: Server closed

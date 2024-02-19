@@ -68,7 +68,7 @@ func newAgentsManager() *AgentsManager {
 // Конструктор структуры агента (в backend/cmd/agent) + обновление монитора агентов
 func NewAgentComm(i int, m *AgentsManager) *agent.AgentComm {
 	ctxAgent, ctxAgentCancel := context.WithCancel(context.Background())
-	hb := make(chan struct{})
+	hb := make(chan struct{}, 1)
 	ti := make(chan int, 1)
 	ri := make(chan bool)
 	mu.Lock()
@@ -368,6 +368,7 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func printTable(table [][]string, w http.ResponseWriter) {
+	// Находим максимальные длины столбцов
 	columnLengths := make([]int, len(table[0]))
 	for _, line := range table {
 		for i, val := range line {
@@ -428,9 +429,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 	tDiv := r.URL.Query().Get("div")
 	tAgent := r.URL.Query().Get("timeout")
 
-	fmt.Print("'")
-	fmt.Print(strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '")) // Ghjdthrf
-	fmt.Print("'\n")
+	fmt.Print("'", strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n") // Ghjdthrf
 
 	// Изменяем значения
 	for i, val := range []string{tSum, tSub, tMult, tDiv, tAgent} {
@@ -482,6 +481,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 		{"вычитание", fmt.Sprint(times.Sub)},
 		{"умножение", fmt.Sprint(times.Mult)},
 		{"деление", fmt.Sprint(times.Div)},
+		{"таймаут", fmt.Sprint(times.AgentTimeout)},
 	}, w)
 }
 
@@ -552,6 +552,7 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 	// Получаем аргументы запроса
 	act := r.URL.Query().Get("action")
 
+	// Пользователь хочет сократить агентов
 	if act == "kill" {
 		for i := 1; i < vars.N_agents+1; i++ {
 			mu.RLock()
@@ -559,24 +560,25 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 			mu.RUnlock()
 			if agentStatus != 0 {
 				logger.Printf("Оркестратор отключает агента %v.\n", i)
-				manager.Ctx[i]()
+				manager.Ctx[i]() // Отменяем контекст агента
 				logger.Printf("Оркестратор отключил агента %v.\n", i)
 				fmt.Fprintf(w, "Оркестратор отключил агента %v.\n", i)
 				return
 			}
 		}
 		fmt.Fprintf(w, "Похоже, все агенты уже мертвы. Оркестратор не смог никого отключить.\n")
+	// Пользователь хочет добавить агентов
 	} else if act == "revive" {
 		for i := 1; i < vars.N_agents+1; i++ {
 			mu.RLock()
 			agentStatus := manager.Agents[i]
 			mu.RUnlock()
 			if agentStatus == 0 {
-				go agent.Agent(NewAgentComm(i, manager))
+				go agent.Agent(NewAgentComm(i, manager)) // Запускаем агента
 				logger.Printf("Запланировали агента %v\n", i)
 				logger.Printf("Оркестратор подключил агента %v.\n", i)
 				fmt.Fprintf(w, "Оркестратор оживил агента %v.\n", i)
-				if !manager.TaskIds.IsEmpty() {
+				if !manager.TaskIds.IsEmpty() { // Если в очереди есть выражения, даем одно из них добавленному агенту
 					if t, ok := manager.TaskIds.Pop(); ok {
 						logger.Printf("Очередь не пустая, оркестратор дал агенту %v выражение с ID %v.\n", i, t)
 						err = giveTaskToAgent(i, t)
@@ -587,9 +589,9 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 							ServerExitChannel <- os.Interrupt
 							logger.Println("Отправили сигнал прерывания.")
 						}
-						return
 					}
 				}
+				return
 			}
 		}
 		fmt.Fprintf(w, "Похоже, все агенты уже живы. Оркестратор не смог никого подключить.\n")
@@ -600,6 +602,16 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func MonitorHandler(w http.ResponseWriter, r *http.Request) {
+	var agents = [][]string{{"Агент", "Состояние"}}
+	for i := 1; i < vars.N_agents+1; i++ {
+		mu.RLock()
+		agentStatus := manager.Agents[i]
+		mu.RUnlock()
+		agents = append(agents, []string{fmt.Sprint("Агент ", i), map[int]string{0: "мертв", 1: "свободен", 2: "считает"}[agentStatus]})
+	}
+	printTable(agents, w)
+}
 
 func Launch() {
 	logger.Println("Подключился оркестратор.")
@@ -607,7 +619,6 @@ func Launch() {
 	db = shared.Db
 
 	// Подготавливаем запросы в БД
-	// (&id, &exp, &finished, &res, &errors, &agent)
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
 		`INSERT INTO requests (request_id, expression, agent_proccess)
@@ -686,6 +697,7 @@ func Launch() {
 	mux.HandleFunc("/calculator/checkexpression", checkExpHandler)                                   // Узнать статус выражения
 	mux.HandleFunc("/calculator/getexpressions", getExpHandler)                                      // Получить список всех выражений
 	mux.HandleFunc("/calculator/values", TimeValues)                                                 // Получение списка доступных операций со временем их выполения
+	mux.HandleFunc("/calculator/monitor", MonitorHandler)
 	// mux.HandleFunc("/calculator/heartbeats", GetHeartbeat)        // Хартбиты (пинги) от агентов
 
 	// Сам http сервер оркестратор
@@ -773,8 +785,6 @@ func CheckWorkLeft(m *AgentsManager) {
 					logger.Println("Отправили сигнал прерывания.")
 				}
 				break
-			} else {
-				mu.RUnlock()
 			}
 		}
 	}
@@ -853,6 +863,7 @@ func MonitorAgents(m *AgentsManager) {
 				}
 			default:
 				if time.Since(m.HbTime[i]) > m.HbTimeout[i] { // Агент не посылал хартбиты слишком долго
+					loggerHB.Println(time.Since(m.HbTime[i]), m.HbTime[i], m.HbTimeout[i])
 					loggerHB.Printf("Оркестратор - агент %v умер (таймаут).\n", i)
 					m.Ctx[i]()
 					close(m.TaskInformer[i])

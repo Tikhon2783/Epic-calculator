@@ -64,7 +64,7 @@ func Agent(a *AgentComm) {
 	wg := sync.WaitGroup{}
 
 	// Готовим пинги
-	pulse = time.NewTicker(min(a.Timeout, time.Second))
+	pulse = time.NewTicker(min(a.Timeout / 5, time.Second))
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -158,7 +158,8 @@ func Agent(a *AgentComm) {
 		chRes := make(chan [4]float32) // Канал для получения значений от вычислителей
 		
 		for {
-			timesNow := *getTimes(a.N)
+			timesNow := getTimes(a.N)
+			// fmt.Println(a.N, "agent sum:", timesNow.Sum)
 			expParts := make(map[[3]int]string) // Мапа для мониторинга статусов частей выражения
 			// ^ ключ - координаты, значение - делитель(1), множитель (2) или сложение (-1)
 			// partStatus := make(map[[2]int]bool) // Мапа для мониторинга статусов чисел
@@ -181,6 +182,10 @@ func Agent(a *AgentComm) {
 			case taskId = <-a.TaskInformer: // Получили ID выражения
 				logger.Printf("Агент %v получил ID выражения: %v\n", a.N, taskId)
 				var exists bool
+				_, err = db.Exec("DELETE FROM agent_proccesses WHERE proccess_id = $1", a.N)
+				if err != nil {
+					panic(err)
+				}
 				err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM agent_proccesses WHERE request_id = $1);", taskId).Scan(&exists)
 				if err != nil {
 					panic(err)
@@ -314,6 +319,7 @@ func Agent(a *AgentComm) {
 						a.ResInformer <- false
 						break Busy
 					}
+					// fmt.Println("Didnt break busy")
 					numPos := floatsToInts(num[:3]) // Координаты числа
 					if expParts[numPos] == "sum" {  // Число - результат сложения / вычитания
 						logger.Printf("— %s + %s = '%v'.\n", comps[numPos[1]], comps[numPos[2]], num[3])
@@ -329,7 +335,13 @@ func Agent(a *AgentComm) {
 							logger.Printf("— %s / %s = '%v'.\n", newParts[numPos[0]][numPos[1]], newParts[numPos[0]][numPos[2]], num[3])
 							newParts[numPos[0]][numPos[2]] = fmt.Sprint("/", num[3])
 						} else {
-							panic("- ERROR - Got unknown type! - ERROR -")
+							loggerErr.Println("- ERROR - Got unknown type! - ERROR -")
+							db.Exec("dbRes", a.N, "0")
+							loggerErr.Printf("Агент %v: в выражении присутствует деление на ноль.\n", a.N)
+							logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
+							fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
+							a.ResInformer <- false
+							break Busy
 						}
 						newParts[numPos[0]][numPos[1]] = ""
 						if val := countReal(newParts[numPos[0]]); val != "" { // Все операции внутри слагаемого закончены (получили одно число)
@@ -511,7 +523,7 @@ func (a *Arr) IsEmpty() bool {
 	return len(a.arr) == 0
 }
 
-func getTimes(n int) *Times {
+func getTimes(n int) Times {
 	rows, err := db.Query("SELECT action, time from time_vars;")
 	if err != nil {
 		panic(err)
@@ -549,7 +561,7 @@ func getTimes(n int) *Times {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return t
+	return *t
 }
 
 func proccessExp(newParts [][]string, taskId, N int, task string) ([][]string, error) {
@@ -638,6 +650,7 @@ func floatsToInts(arr []float32) [3]int {
 }
 
 func calcMult(v1, v2 string, pos [3]int, ch chan<- [4]float32, t Times) (string, error) {
+	// fmt.Println(t)
 	switch string(v1[0]) {
 	case "/": // Первое число - делитель
 		switch string(v2[0]) {
@@ -663,32 +676,33 @@ func calcMult(v1, v2 string, pos [3]int, ch chan<- [4]float32, t Times) (string,
 			if err != nil {
 				return "", err
 			}
-			go div(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
+			go div(vFloat1, vFloat2, intsToFloats(pos), ch, t.Div)
 			return "mult", nil
 		default: // (a * (b * c))
 			vFloat1, vFloat2, err := convertStrsToFloat32(v1, v2)
 			if err != nil {
 				return "", err
 			}
-			go mult(vFloat1, vFloat2, intsToFloats(pos), ch, t.Div)
+			go mult(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
 			return "mult", nil
 		}
 	}
 }
 
 func calcSum(v1, v2 string, pos [3]int, ch chan<- [4]float32, t Times) error {
+	// fmt.Println(t)
 	if string(v2[0]) == "-" {
 		vFloat1, vFloat2, err := convertStrsToFloat32(v1, v2[1:])
 		if err != nil {
 			return err
 		}
-		go sub(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
+		go sub(vFloat1, vFloat2, intsToFloats(pos), ch, t.Sub)
 	} else {
 		vFloat1, vFloat2, err := convertStrsToFloat32(v1, v2)
 		if err != nil {
 			return err
 		}
-		go sum(vFloat1, vFloat2, intsToFloats(pos), ch, t.Mult)
+		go sum(vFloat1, vFloat2, intsToFloats(pos), ch, t.Sum)
 	}
 	return nil
 }
@@ -710,6 +724,7 @@ func countReal(arr []string) string {
 
 func sum(a, b float32, n [3]float32, ch chan<- [4]float32, t time.Duration) {
 	now := time.Now()
+	// fmt.Println("вычислитель", t)
 	res := [4]float32{}
 	_ = append(append(res[:0], n[:]...), a+b)
 	time.Sleep(t - time.Since(now))
