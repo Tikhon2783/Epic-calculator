@@ -153,11 +153,12 @@ func Agent(a *AgentComm) {
 		}()
 
 		logger.Printf("Агент %v начинает работу...\n", a.N)
-
+		
 		// Переменные ниже понадобятся позже - иначе их не видит второй селект
 		chRes := make(chan [4]float32) // Канал для получения значений от вычислителей
-		
+
 		for {
+
 			timesNow := getTimes(a.N)
 			// fmt.Println(a.N, "agent sum:", timesNow.Sum)
 			expParts := make(map[[3]int]string) // Мапа для мониторинга статусов частей выражения
@@ -165,11 +166,11 @@ func Agent(a *AgentComm) {
 			// partStatus := make(map[[2]int]bool) // Мапа для мониторинга статусов чисел
 			var (
 				comps []string         // Слайс со слагаемыми
-				newParts      [][]string
+				newParts      [][]string // Слайс со всем
 				stoppedAt     int = 1 // Индекс последней части, принятой вычеслителем
 				activeWorkers int     // Кол-во занятых вычислителей
-				taskId        int
-				task          string
+				taskId        int	  // ID выражения
+				task          string  // Само выражение
 			)
 
 			// Фаза 1: агент свободен
@@ -297,6 +298,7 @@ func Agent(a *AgentComm) {
 				logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 				fmt.Println(taskId, ":", task, "=", task)
 				a.ResInformer <- true
+				// close(chRes)
 				continue
 			}
 			
@@ -317,6 +319,7 @@ func Agent(a *AgentComm) {
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 						fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
 						a.ResInformer <- false
+						// close(chRes)
 						break Busy
 					}
 					// fmt.Println("Didnt break busy")
@@ -341,6 +344,7 @@ func Agent(a *AgentComm) {
 							logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 							fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
 							a.ResInformer <- false
+							// close(chRes)
 							break Busy
 						}
 						newParts[numPos[0]][numPos[1]] = ""
@@ -480,6 +484,7 @@ func Agent(a *AgentComm) {
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 						fmt.Printf("%v: '%s' = '%v'\n", taskId, task, val)
 						a.ResInformer <- true
+						// close(chRes)
 						break Busy
 					}
 				}
