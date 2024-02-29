@@ -293,10 +293,10 @@ func Agent(a *AgentComm) {
 			}
 			logger.Printf("Агент %v произвел первичную обработку частей выражения, переходит в занятую фазу.\n", a.N)
 			
-			if activeWorkers == 0 {
-				db.Exec("dbRes", a.N, task)
+			if val := countReal(comps); val != "" &&activeWorkers == 0 {
+				db.Exec("dbRes", a.N, val)
 				logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
-				fmt.Println(taskId, ":", task, "=", task)
+				fmt.Println(taskId, ":", val, "=", val)
 				a.ResInformer <- true
 				// close(chRes)
 				continue

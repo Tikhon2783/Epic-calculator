@@ -153,15 +153,31 @@ func validityMiddleware(next http.Handler) http.Handler {
 
 		// Проверяем выражение на валидность
 		exp := r.PostForm.Get("expression")
+		exp = strings.ReplaceAll(exp, " ", "") // Убираем пробелы
+
+		// Проверяем на постановку знаков
 		replacer := strings.NewReplacer(
+			"-", "+",
+			"*", "+",
+			"/", "+",
+		)
+		replacedExp := replacer.Replace(exp)
+		if strings.Contains(replacedExp, "++") ||
+			string(replacedExp[0]) == "+" || string(replacedExp[len(replacedExp)-1]) == "+" {
+			logger.Println("Ошибка: нарушен синтаксис выражений, выражение не обрабатывается.")
+			loggerErr.Println("Ошибка с проверкой выражения парсингом:", "неправильная постановка знаков")
+			http.Error(w, "Выражение невалидно", http.StatusBadRequest)
+			return
+		}
+
+		// Проверяем, нет ли посторонних символов в выражении
+		replacer = strings.NewReplacer(
 			"+", "",
 			"-", "",
 			"*", "",
 			"/", "",
 		)
-		// Проверяем, нет ли посторонних символов в выражении
-		// Ошибка возвращается еще и в случае, если кол-во цифр превышает лимит int64
-		if _, err := strconv.Atoi(replacer.Replace(exp)); err != nil {
+		if _, err := strconv.ParseFloat(replacer.Replace(exp), 64); err != nil {
 			logger.Println("Ошибка: нарушен синтаксис выражений, выражение не обрабатывается.")
 			loggerErr.Println("Ошибка с проверкой выражения парсингом:", err)
 			http.Error(w, "Выражение невалидно", http.StatusBadRequest)
@@ -205,18 +221,15 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 		// В теории две горутины могут попытаться дать выражение одному и тому же агенту,
 		// если одна из них получит статус агента как свободного, пока вторая проверяет,
 		// чему равен статус агента (следующая строка) — то есть до того, как функция giveTaskToAgent полностью заблокирует мьютекс.
-		// Такой сценарий маловероятен, но если так произойдет, постгрес выдаст ошибку — нельзя записать два выражения на одного агента,
-		// и пользователю будет возвращена ошибка.
-		// Мне кажется, это логичнее, чем полностью блокировать мьютекс до конца итерации + мьютекс находится в
+		// Такой сценарий маловероятен, но если он произойдет, агент не примет новое выражение — он уже прочитал канал и не слушает,
+		// функция вернет ошибку "agent did not receive task", и мы продолжим искать свободных агентов, не вызывая паники.
+		// Мне кажется, это логичнее, чем полностью блокировать мьютекс до конца итерации, и еще мьютекс находится в
 		// функции, где и происходит изменение данных, которое может привести к гонке без использования мьютексов.
-
-		// Поправка: ошибка выдана не будет, потому что нам нужны повторяющиеся агенты для сообщений пользователю о том, какой агент считал выражение
-		// Буду над этим работать (скорее всего канал отправки выражения зависнет,
-		// так как агент уже получил выражение, в теории можно сделать проверку и, если агент не принимает выражение,
-		// отправлять другому/в очередь)
 		if agentStatus == 1 {
 			err = giveTaskToAgent(i, id)
-			if err != nil {
+			if err == fmt.Errorf("agent did not receive task") { // Агент не принял выражение, ищем еще агентов
+				continue
+			} else if err != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 				loggerErr.Println("Оркестратор: ошибка назначения агента в таблице с выражениями:", err)
 				http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
@@ -605,12 +618,17 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 					if t, ok := manager.TaskIds.Pop(); ok {
 						logger.Printf("Очередь не пустая, оркестратор дал агенту %v выражение с ID %v.\n", i, t)
 						err = giveTaskToAgent(i, t)
-						if err != nil {
-							loggerErr.Println("Паника:", err)
-							logger.Println("Критическая ошибка, завершаем работу программы...")
-							logger.Println("Отправляем сигнал прерывания...")
-							ServerExitChannel <- os.Interrupt
-							logger.Println("Отправили сигнал прерывания.")
+						if err == fmt.Errorf("agent did not receive task") { // Агент не принял выражение, видимо, уже занят
+							loggerErr.Println(
+								`Оркестратор: не смогли отдать выражению агенту (агент не принял),
+								 оставляем агента без задачи, кладем выражение обратно в очередь.`)
+							manager.TaskIds.Append(t)
+							continue
+						} else if err != nil {
+							logger.Println("Внутренняя ошибка, выражение возвращается в очередь.")
+							loggerErr.Println("Оркестратор: ошибка назначения выражению агенту:", err)
+							manager.TaskIds.Append(t)
+							return
 						}
 					}
 				}
@@ -852,12 +870,24 @@ func giveTaskToAgent(n, id int) error {
 	}
 
 	logger.Printf("Отдаем выражение агенту %v.", n)
-	manager.Agents[n] = 2 // Записываем агента как занятого
 	select {
 	case manager.TaskInformer[n] <- id:
+		manager.Agents[n] = 2 // Записываем агента как занятого
 		logger.Printf("Выражение отдано агенту %v.", n)
 	default:
 		logger.Printf("Не смогли отдать выражение агенту %v.", n)
+
+		_, err = db.Exec(
+			`UPDATE requests
+				SET agent_proccess = -1
+				WHERE request_id = $1;`,
+			id,
+		)
+		if err != nil {
+			loggerErr.Println(err)
+		}
+
+		return fmt.Errorf("agent did not receive task")
 	}
 	return nil
 }
@@ -960,7 +990,13 @@ func MonitorAgents(m *AgentsManager) {
 					if t, ok := m.TaskIds.Pop(); ok {
 						logger.Printf("Очередь выражений не пустая, отдаем агенту %v выражение с id %v.", i, t)
 						err = giveTaskToAgent(i, t)
-						if err != nil {
+						if err == fmt.Errorf("agent did not receive task") { // Агент не принял выражение, видимо, уже занят
+							loggerErr.Println(
+								`Оркестратор: не смогли отдать выражению агенту (агент не принял),
+								 оставляем агента без задачи, кладем выражение обратно в очередь.`)
+							m.TaskIds.Append(t)
+							continue
+						} else if err != nil {
 							loggerErr.Println("Паника при попытке отдать агенту выражение:", err)
 							logger.Println("Критическая ошибка, завершаем работу программы...")
 							logger.Println("Отправляем сигнал прерывания...")
