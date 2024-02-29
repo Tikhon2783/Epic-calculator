@@ -1,8 +1,6 @@
 package orchestrator
 
 import (
-	// "context"
-	// "database/sql"
 	"context"
 	"fmt"
 	"log"
@@ -12,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	// "errors"
 
 	"calculator/backend/cmd/agent"
 	shared "calculator/cmd"
@@ -37,7 +33,7 @@ var (
 	agentsTimeout     *time.Duration
 )
 
-// Структура для мониторинга агентов
+// Структура для мониторинга агентов (менеджер агентов)
 type AgentsManager struct {
 	Agents [vars.N_agents + 1]int // Кол-во живых агентов (0 - мертв, 1 - свободен, 2 - занят)
 	// AgentsFree   []int                 	 // Свободные агенты
@@ -53,8 +49,7 @@ type AgentsManager struct {
 // Конструктор монитора агентов
 func newAgentsManager() *AgentsManager {
 	return &AgentsManager{
-		Agents: [vars.N_agents + 1]int{},
-		// AgentsFree:   make([]int, vars.N_agents),
+		Agents:       [vars.N_agents + 1]int{},
 		Hb:           make(map[int]<-chan struct{}),
 		HbTime:       make(map[int]time.Time),
 		HbTimeout:    make(map[int]time.Duration),
@@ -67,12 +62,14 @@ func newAgentsManager() *AgentsManager {
 
 // Конструктор структуры агента (в backend/cmd/agent) + обновление монитора агентов
 func NewAgentComm(i int, m *AgentsManager) *agent.AgentComm {
+	// Создаем каналы и контекст
 	ctxAgent, ctxAgentCancel := context.WithCancel(context.Background())
 	hb := make(chan struct{}, 1)
 	ti := make(chan int, 1)
 	ri := make(chan bool)
 	mu.Lock()
 	defer mu.Unlock()
+	// Добавляем информацию об агенте в структуру менеджера агентов
 	m.Agents[i] = 1
 	m.Ctx[i] = ctxAgentCancel
 	m.Hb[i] = hb
@@ -80,6 +77,7 @@ func NewAgentComm(i int, m *AgentsManager) *agent.AgentComm {
 	m.HbTimeout[i] = *agentsTimeout
 	m.TaskInformer[i] = ti
 	m.ResInformer[i] = ri
+	// Возвращаем структуру, которую передадим агенту
 	return &agent.AgentComm{
 		N:            i,
 		Ctx:          ctxAgent,
@@ -95,8 +93,7 @@ type SrvSelfDestruct struct {
 	mu sync.Mutex
 }
 
-// type rcvExpHandler struct{}
-
+// Нужны для передачи нескольких значений (мапы) через контекст
 type myKeys interface{}
 
 var myKey myKeys = "myKey"
@@ -162,8 +159,11 @@ func validityMiddleware(next http.Handler) http.Handler {
 			"*", "",
 			"/", "",
 		)
+		// Проверяем, нет ли посторонних символов в выражении
+		// Ошибка возвращается еще и в случае, если кол-во цифр превышает лимит int64
 		if _, err := strconv.Atoi(replacer.Replace(exp)); err != nil {
 			logger.Println("Ошибка: нарушен синтаксис выражений, выражение не обрабатывается.")
+			loggerErr.Println("Ошибка с проверкой выражения парсингом:", err)
 			http.Error(w, "Выражение невалидно", http.StatusBadRequest)
 			return
 		}
@@ -175,6 +175,7 @@ func validityMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Хендлер на endpoint принятия выражений
 func handleExpression(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Обработчик выражений получил запрос...")
 
@@ -186,7 +187,6 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 		loggerErr.Printf("Оркестратор: ошибка записи выражения в таблицу с выражениями: %s.", err)
 		http.Error(w, "Ошибка помещения выражения в базу данных", http.StatusInternalServerError)
-		// mu.Unlock()
 		return
 	}
 
@@ -202,6 +202,18 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 		mu.RLock()
 		agentStatus := manager.Agents[i]
 		mu.RUnlock()
+		// В теории две горутины могут попытаться дать выражение одному и тому же агенту,
+		// если одна из них получит статус агента как свободного, пока вторая проверяет,
+		// чему равен статус агента (следующая строка) — то есть до того, как функция giveTaskToAgent полностью заблокирует мьютекс.
+		// Такой сценарий маловероятен, но если так произойдет, постгрес выдаст ошибку — нельзя записать два выражения на одного агента,
+		// и пользователю будет возвращена ошибка.
+		// Мне кажется, это логичнее, чем полностью блокировать мьютекс до конца итерации + мьютекс находится в
+		// функции, где и происходит изменение данных, которое может привести к гонке без использования мьютексов.
+
+		// Поправка: ошибка выдана не будет, потому что нам нужны повторяющиеся агенты для сообщений пользователю о том, какой агент считал выражение
+		// Буду над этим работать (скорее всего канал отправки выражения зависнет,
+		// так как агент уже получил выражение, в теории можно сделать проверку и, если агент не принимает выражение,
+		// отправлять другому/в очередь)
 		if agentStatus == 1 {
 			err = giveTaskToAgent(i, id)
 			if err != nil {
@@ -221,6 +233,7 @@ func handleExpression(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, http.StatusText(200), "Выражение поставленно в очередь")
 }
 
+// Хендлер на endpoint получения результата выражения по ключу
 func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -268,13 +281,13 @@ func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 			WHERE request_id=$1;`,
 		id,
 	).Scan(&exp, &finished, &res, &errors, &agent)
+	logger.Println("Bye postgresql")
 	if err != nil {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
 		loggerErr.Printf("Оркестратор: ошибка получения выражения по ключу %s из базы данных: %s", id, err)
 		http.Error(w, "Ошибка получения выражения по ключу из базы данных.", http.StatusInternalServerError)
 		return
 	}
-	logger.Println("Bye postgresql")
 
 	if !finished {
 		logger.Println("Выражение успешно найдено, результат еще не получен.")
@@ -291,6 +304,7 @@ func checkExpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Хендлер на endpoint получения списка выражений
 func getExpHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -306,9 +320,7 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 	// Метод должен быть GET
 	if r.Method != http.MethodGet {
 		logger.Println("Неправильный метод, выражение не обрабатывается.")
-		http.Error(w, `зачем ты сюда постишь, здесь получают список выражений.
-		 Тебе не обязательно посылать запросы вручную у меня есть специальный скрипт, в readme это описано.
-		 Хотя круто, что кому то не лень самому здесь копаться, спасибо`, http.StatusMethodNotAllowed)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -319,15 +331,16 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
 		return
 	}
+
 	var (
-		exps     [][]string = [][]string{{"ID", "выражение", "рез-т", "агент"}}
+		exps     [][]string = [][]string{{"ID", "выражение", "рез-т", "агент"}} // Слайс с выражениями (и заголовком)
 		id       int
 		exp      string
 		finished bool
 		res      string
 		errors   bool
 		agent    int
-		failed   int
+		failed   int // Сколько строк не смогли получить (ошибка от постгреса)
 	)
 	defer rows.Close()
 	for rows.Next() {
@@ -353,20 +366,21 @@ func getExpHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	printTable(exps, w)
+	printTable(exps, w) // Выводим таблицу в консоль
 	if failed != 0 {
 		fmt.Fprintln(w, "Не удалось получить", failed, "строк.")
 	}
 	err = rows.Err()
 	if err != nil {
 		logger.Println("Ошибка со строками.")
-		loggerErr.Printf("Оркестратор: ошибка получения строк из базы данных: %s", err)
-		// http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
+		loggerErr.Printf("Оркестратор: ошибка получения строк из базы данных (но таблицу вывели): %s", err)
+		// http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError
 		return
 	}
 
 }
 
+// Функция для вывода красивой таблицы в консоль
 func printTable(table [][]string, w http.ResponseWriter) {
 	// Находим максимальные длины столбцов
 	columnLengths := make([]int, len(table[0]))
@@ -405,6 +419,7 @@ func printTable(table [][]string, w http.ResponseWriter) {
 	}
 }
 
+// Хендлер на endpoint с значениями времени
 func TimeValues(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -415,6 +430,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	logger.Println("Оркестратор получил запрос на получение/изменение значений времени.")
+
 	// Метод должен быть GET
 	if r.Method != http.MethodGet {
 		logger.Println("Неправильный метод, выражение не обрабатывается.")
@@ -429,11 +445,16 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 	tDiv := r.URL.Query().Get("div")
 	tAgent := r.URL.Query().Get("timeout")
 
-	fmt.Print("'", strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n") // Ghjdthrf
+	// Выводим в консоль калькулятора полученные значения для упрощенного дебага
+	fmt.Print("'", strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n")
+	logger.Print(
+		"Оркестратор: полученные значения на изменение(sum sub mul div timeout): '",
+		strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n",
+	)
 
 	// Изменяем значения
 	for i, val := range []string{tSum, tSub, tMult, tDiv, tAgent} {
-		if val == "" {
+		if val == "" { // Не получили запрос на изменение данной переменной
 			continue
 		}
 		fmt.Printf("'%s'\n", val)
@@ -447,6 +468,8 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 			)
 			continue
 		}
+
+		// Проверяем на валидность значения
 		if t < 0 {
 			fmt.Fprintf(
 				w,
@@ -455,6 +478,8 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 			)
 			continue
 		}
+
+		// Обновляем значение в БД
 		_, err = db.Exec(
 			`UPDATE time_vars
 				SET time = $2
@@ -473,7 +498,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Получаем значения
+	// Получаем значения и возвращаем пользователю
 	times := getTimes()
 	printTable([][]string{
 		{"операция", "время"},
@@ -485,6 +510,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 	}, w)
 }
 
+// Функция для получения времени операций из БД
 func getTimes() *agent.Times {
 	rows, err := db.Query("SELECT action, time from time_vars;")
 	if err != nil {
@@ -505,23 +531,18 @@ func getTimes() *agent.Times {
 		case "summation":
 			t.Sum = time.Duration(t_time * 1000000)
 			logger.Printf("Время на сложение:, %v\n", t.Sum)
-			// fmt.Fprintf(w, "Время на сложение:, %v\n", t.Sum)
 		case "substraction":
 			t.Sub = time.Duration(t_time * 1000000)
 			logger.Printf("Время на вычитание:, %v\n", t.Sub)
-			// fmt.Fprintf(w, "Время на вычитание:, %v\n", t.Sub)
 		case "multiplication":
 			t.Mult = time.Duration(t_time * 1000000)
 			logger.Printf("Время на умножение:, %v\n", t.Mult)
-			// fmt.Fprintf(w, "Время на умножение:, %v\n", t.Mult)
 		case "division":
 			t.Div = time.Duration(t_time * 1000000)
 			logger.Printf("Время на деление:, %v\n", t.Div)
-			// fmt.Fprintf(w, "Время на деление:, %v\n", t.Div)
 		case "agent_timeout":
 			t.AgentTimeout = time.Duration(t_time * 1000000)
 			logger.Printf("Таймаут агентов — %v\n", t.AgentTimeout)
-			// fmt.Fprintf(w, "Таймаут агентов — %v\n", t.AgentTimeout)
 			agentsTimeout = &t.AgentTimeout
 		}
 	}
@@ -532,6 +553,7 @@ func getTimes() *agent.Times {
 	return t
 }
 
+// Хендлер на endpoint убийства агента
 func KillHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -542,6 +564,7 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	logger.Println("Оркестратор получил запрос на убийство агента.")
+
 	// Метод должен быть GET
 	if r.Method != http.MethodGet {
 		logger.Println("Неправильный метод, выражение не обрабатывается.")
@@ -554,7 +577,7 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Пользователь хочет сократить агентов
 	if act == "kill" {
-		for i := 1; i < vars.N_agents+1; i++ {
+		for i := 1; i < vars.N_agents+1; i++ { // Ищем живого агента
 			mu.RLock()
 			agentStatus := manager.Agents[i]
 			mu.RUnlock()
@@ -567,9 +590,9 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		fmt.Fprintf(w, "Похоже, все агенты уже мертвы. Оркестратор не смог никого отключить.\n")
-	// Пользователь хочет добавить агентов
+		// Пользователь хочет добавить агентов
 	} else if act == "revive" {
-		for i := 1; i < vars.N_agents+1; i++ {
+		for i := 1; i < vars.N_agents+1; i++ { // Ищем мертвого агента
 			mu.RLock()
 			agentStatus := manager.Agents[i]
 			mu.RUnlock()
@@ -602,6 +625,7 @@ func KillHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Хендлер на endpoint мониторинга агентов
 func MonitorHandler(w http.ResponseWriter, r *http.Request) {
 	var agents = [][]string{{"Агент", "Состояние"}}
 	for i := 1; i < vars.N_agents+1; i++ {
@@ -613,6 +637,7 @@ func MonitorHandler(w http.ResponseWriter, r *http.Request) {
 	printTable(agents, w)
 }
 
+// Основная горутина оркестратора
 func Launch() {
 	logger.Println("Подключился оркестратор.")
 	fmt.Println("Оркестратор передаёт привет :)")
@@ -698,7 +723,6 @@ func Launch() {
 	mux.HandleFunc("/calculator/getexpressions", getExpHandler)                                      // Получить список всех выражений
 	mux.HandleFunc("/calculator/values", TimeValues)                                                 // Получение списка доступных операций со временем их выполения
 	mux.HandleFunc("/calculator/monitor", MonitorHandler)
-	// mux.HandleFunc("/calculator/heartbeats", GetHeartbeat)        // Хартбиты (пинги) от агентов
 
 	// Сам http сервер оркестратор
 	Srv = &http.Server{
@@ -732,6 +756,7 @@ func Launch() {
 	logger.Println("Отправили сигнал прерывания.")
 }
 
+// Функция, которая проверяет, есть ли в БД непосчитанные выражения
 func CheckWorkLeft(m *AgentsManager) {
 	logger.Println("Оркестратор: проверка на непосчитанные выражения...")
 	var id int
@@ -759,15 +784,17 @@ func CheckWorkLeft(m *AgentsManager) {
 			logger.Println("Отправили сигнал прерывания.")
 		}
 
-		if !m.TaskIds.IsEmpty() {
+		if !m.TaskIds.IsEmpty() { // Очередь не пустая
 			if _, ok := m.TaskIds.Pop(); ok {
 				logger.Println("Очередь выражений не пустая, помещаем туда выражение.")
 				m.TaskIds.Append(id)
 				return
 			} else {
+				// Этой ситуации никогда быть не должно и я ее не встретил ни разу :)
 				loggerErr.Println("Слайс не пустой но пустой...")
 			}
 		}
+
 		logger.Println("Ищем свободного агента...")
 		// Ищем свободного агента
 		for i := 1; i < vars.N_agents+1; i++ {
@@ -799,6 +826,7 @@ func CheckWorkLeft(m *AgentsManager) {
 	logger.Println("Оркестратор закончил проверку на непосчитанные выражения.")
 }
 
+// Функция, которая назначает агенту выражение
 func giveTaskToAgent(n, id int) error {
 	logger.Printf("Отдаем задачу с ID %v агенту %v...", id, n)
 	mu.Lock()
@@ -807,7 +835,10 @@ func giveTaskToAgent(n, id int) error {
 	// conn, err := db.Acquire()
 	// fmt.Println("Acquired connection!", err)
 	// conn.Close()
-	db.Reset()
+
+	// Получить подключение получалось, но запрос все равно зависал без db.Reset()
+
+	db.Reset() // Без этой команды запрос зависает и последующие действия не выполняются
 	logger.Println("Сбросили подключения")
 	_, err = db.Exec(
 		`UPDATE requests
@@ -819,8 +850,9 @@ func giveTaskToAgent(n, id int) error {
 	if err != nil {
 		return err
 	}
+
 	logger.Printf("Отдаем выражение агенту %v.", n)
-	manager.Agents[n] = 2
+	manager.Agents[n] = 2 // Записываем агента как занятого
 	select {
 	case manager.TaskInformer[n] <- id:
 		logger.Printf("Выражение отдано агенту %v.", n)
@@ -830,6 +862,7 @@ func giveTaskToAgent(n, id int) error {
 	return nil
 }
 
+// Горутина менеджера агентов, которая следит за их состоянием
 func MonitorAgents(m *AgentsManager) {
 	logger.Println("Мониторинг агентов подключился.")
 	var n int
@@ -960,6 +993,7 @@ func MonitorAgents(m *AgentsManager) {
 	}
 }
 
+// Хендлер на endpoint убийства оркестратора
 func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -987,47 +1021,48 @@ func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
 	logger.Println("Закрыли HTTP сервер.")
+	// Агенты сами отключатся при остановке программы
 }
 
 /*
-                                                  .:                                      
-                                               .-==                                       
-                                 :---:    *+++*+.                                         
-                             :=++-----++:-+----+=                                         
-                          -=+=-----===--+#------#                                         
-                       -++-----+++=---++-++----=+                                         
-                    .=+=----++=---------+=++---*.                                         
-                   =*-----++-------------*=*=-+=                                          
-                  +=-----*--------------==#+#+#:   .:-:.                                  
-.-.              -*-----*----------====---========*=--:=+                                 
-  -=:++++=-:     -+-----++------=+=-:::==:  .::-+:-+%@+:#                                 
-    +------=+=:  .#------=*=--++-:::::+:    %@#:-=:::=+=*                                 
-    ==--------=+=:++-------**=:----:::*     :=: =-:::::+=                          .      
-     *=-----------+#*=---=*-==-..::-+:==       =+:::::::-+                   -:#+++++:    
-      -+=-------------=+*+:+.   %%#. *:-==---==:::::::::::*.               *+**+=----++   
-        :=+=---------=++*:--    -+-  #-*%@*==-:::::::::::::*.             :*-=++------=#. 
-           .-===+++=*-:*=::*        +=*#*=:::*::::::::::::::*.           .#+++=---=++=-.  
-                   :*:+%=::-+-:..:-=--+:-=+:+=:::::::::::::::*.        -*%@%*+++==:       
-                    ++:-*:::::---:::::-=* :+-+::::::::::::::::*     .=%%%#*:              
-                     .-=*-:::::::::::::::==:::::::::::::::::::-+  -*%*%%+.                
-                        .*:::::::::::G:O:L:A:N:G:::::::::::::::++###@#-                   
-                         .*::::::::::::::::::::::::::::::::::-*%##%+:                     
-                          :*::::::::::::::::::-::::::::::::=#%*%%:=:                      
-                           :*:::::::::::::::=+-=+-::::::-+%##%*-++*                       
-                            :*:::::--=======*++:+*+++=+###%#=:::-*=                       
-                            :=*=++==-----------=---=+***%+-:::::-+                        
-                            +=------------------=+***=--#::::::::+                        
-                             =+---------------=+%#*=---=%-:::::::+                        
-                              :+-------=++--=**+=------*#:::::::=-                        
-                               .*-------**#**=---------##:::::::+.                        
-                                -#=----=*##*+---------***:::::::*                         
-                                .+=+-*#+=--**=-------=#*=::::::-+                         
-                                 *:-*-==-------------#+#:::::::*=-.                       
-                                 +:::*=-------------**+*::::::#=:=+                       
-                                 .*-::++-----------=#+#-::::+= .--                        
-                                  **+::=+---------=#++*::-+-                              
-                                     -===*=-------#++#*==.                                
-                                      -+-*#=-----#+++*                                    
-                                     -+::*.-+---**++*.                                    
-                                     **-*.  .+=****-    
+                                                  .:
+                                               .-==
+                                 :---:    *+++*+.
+                             :=++-----++:-+----+=
+                          -=+=-----===--+#------#
+                       -++-----+++=---++-++----=+
+                    .=+=----++=---------+=++---*.
+                   =*-----++-------------*=*=-+=
+                  +=-----*--------------==#+#+#:   .:-:.
+.-.              -*-----*----------====---========*=--:=+
+  -=:++++=-:     -+-----++------=+=-:::==:  .::-+:-+%@+:#
+    +------=+=:  .#------=*=--++-:::::+:    %@#:-=:::=+=*
+    ==--------=+=:++-------**=:----:::*     :=: =-:::::+=                          .
+     *=-----------+#*=---=*-==-..::-+:==       =+:::::::-+                   -:#+++++:
+      -+=-------------=+*+:+.   %%#. *:-==---==:::::::::::*.               *+**+=----++
+        :=+=---------=++*:--    -+-  #-*%@*==-:::::::::::::*.             :*-=++------=#.
+           .-===+++=*-:*=::*        +=*#*=:::*::::::::::::::*.           .#+++=---=++=-.
+                   :*:+%=::-+-:..:-=--+:-=+:+=:::::::::::::::*.        -*%@%*+++==:
+                    ++:-*:::::---:::::-=* :+-+::::::::::::::::*     .=%%%#*:
+                     .-=*-:::::::::::::::==:::::::::::::::::::-+  -*%*%%+.
+                        .*:::::::::::G:O:L:A:N:G:::::::::::::::++###@#-
+                         .*::::::::::::::::::::::::::::::::::-*%##%+:
+                          :*::::::::::::::::::-::::::::::::=#%*%%:=:
+                           :*:::::::::::::::=+-=+-::::::-+%##%*-++*
+                            :*:::::--=======*++:+*+++=+###%#=:::-*=
+                            :=*=++==-----------=---=+***%+-:::::-+
+                            +=------------------=+***=--#::::::::+
+                             =+---------------=+%#*=---=%-:::::::+
+                              :+-------=++--=**+=------*#:::::::=-
+                               .*-------**#**=---------##:::::::+.
+                                -#=----=*##*+---------***:::::::*
+                                .+=+-*#+=--**=-------=#*=::::::-+
+                                 *:-*-==-------------#+#:::::::*=-.
+                                 +:::*=-------------**+*::::::#=:=+
+                                 .*-::++-----------=#+#-::::+= .--
+                                  **+::=+---------=#++*::-+-
+                                     -===*=-------#++#*==.
+                                      -+-*#=-----#+++*
+                                     -+::*.-+---**++*.
+                                     **-*.  .+=****-
 */
