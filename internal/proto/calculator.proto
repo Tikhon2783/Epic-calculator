@@ -1,0 +1,141 @@
+syntax = "proto3"; // версия proto файлов
+package calc; // название пакета
+option go_package = "calculator/proto";
+
+/*
+"/calculator/kill/orchestrator" // Убийство сервера
+"/calculator/kill/agent"        // Убийство агента
+"/calculator/sendexpression"    // Принять выражение
+"/calculator/checkexpression"   // Узнать статус выражения
+"/calculator/getexpressions"    // Получить список всех выражений
+"/calculator/values"            // Получение списка доступных операций со временем их выполения
+"/calculator/monitor"           // Мониторинг состояния агентов
+*/
+
+
+// Пустое сообщение
+message EmptyMessage {}
+// Сообщение с указанием имени пользователя
+message UsernameOnlyRequest {
+    string username = 1;
+    bool perms = 2;
+}
+// Сообщение о наличии ошибки
+message ErrorResponse {
+    string error = 1;
+}
+// Сообщение о наличии ошибки с указанием номера агента
+message AgentAndErrorResponse {
+    repeated string error = 1;
+    int32 agent = 2;
+}
+
+// Запрос на подсчет выражения
+message ExpSendRequest {
+    string username = 1;
+    string id = 2;
+    string expression = 3;
+}
+// Запрос на результат выражения
+message ExpCheckRequest {
+    string username = 1;
+    string id = 2;
+}
+message ExpCheckResponse {
+    string expression = 1;
+    bool finished = 2;
+    bool divByZeroError = 3;
+    string result = 4;
+    int32 agent = 5;
+    string error = 6;
+    string username = 7;
+}
+// Запрос на все выражения
+message ExpsGetResponse {
+    repeated ExpCheckResponse expressions = 1;
+    repeated string error = 2;
+}
+// Ответ на получение времени операций + таймаутов
+message TimesResponse {
+    int64 summation = 1;
+    int64 substraction = 2;
+    int64 multiplication = 3;
+    int64 division = 4;
+    int64 agentTimeout = 5;
+    repeated string error = 6;
+    string username = 7;
+}
+// Запрос на установку времени операций + таймаутов
+message TimesSetRequest{
+    string username = 1;
+    int64 summation = 2;
+    int64 substraction = 3;
+    int64 multiplication = 4;
+    int64 division = 5;
+    int64 agentTimeout = 6;
+}
+message TimesSetResponse {
+    TimesResponse times = 1;
+    repeated string error = 2;
+}
+// Ответ 
+message MonitorResponse {
+    message SingleObj {
+        int32 id = 1;
+        int32 state = 2;
+    }
+    repeated SingleObj states = 1;
+}
+
+// Пинги
+message HeartbeatRequest {
+    int32 agentID = 1;
+}
+// 
+message ResultRequest {
+    int32 agentID = 1;
+    bool divByZeroError = 2;
+    string result = 3;
+}
+//
+message ExpUpdateRequest {
+    int32 agentID = 1;
+    string parts = 2;
+}
+//
+message ExpSeekRequest {
+    int32 agentID = 1;
+}
+message ExpSeekResponse {
+    bool found = 1;
+    string expression = 2;
+    TimesResponse times = 3;
+    string expressionID = 4;
+}
+//
+message ExpConfirmRequest {
+    string agentID = 1;
+    string expressionID = 2;
+}
+
+
+// Определение сервиса с двумя методами
+service OrchestratorService {
+	// методы для общения фронта с оркестратором
+    rpc KillOrch (EmptyMessage) returns (ErrorResponse);
+    rpc KillAgent (EmptyMessage) returns (AgentAndErrorResponse);
+    rpc ReviveAgent (EmptyMessage) returns (AgentAndErrorResponse);
+    rpc SendExp (ExpSendRequest) returns (AgentAndErrorResponse);
+    rpc CheckExp (ExpCheckRequest) returns (ExpCheckResponse);
+    rpc GetExps (UsernameOnlyRequest) returns (ExpsGetResponse);
+    rpc GetTimes (UsernameOnlyRequest) returns (TimesResponse);
+    rpc SetTimes (TimesSetRequest) returns (TimesSetResponse);
+    rpc Monitor (EmptyMessage) returns (MonitorResponse);
+
+    // методы для общения агентов с оркестратором
+    rpc SendHeartbeat (HeartbeatRequest) returns (EmptyMessage);
+    rpc SendResult (ResultRequest) returns (EmptyMessage);
+    rpc UpdateResult (ExpUpdateRequest) returns (EmptyMessage);
+    rpc SeekForExp (ExpSeekRequest) returns (ExpSeekResponse);
+    rpc ConfirmTakeExp (ExpConfirmRequest) returns (ErrorResponse);
+}
