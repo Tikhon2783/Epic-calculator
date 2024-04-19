@@ -2,20 +2,10 @@ syntax = "proto3"; // версия proto файлов
 package calc; // название пакета
 option go_package = "calculator/proto";
 
-/*
-"/calculator/kill/orchestrator" // Убийство сервера
-"/calculator/kill/agent"        // Убийство агента
-"/calculator/sendexpression"    // Принять выражение
-"/calculator/checkexpression"   // Узнать статус выражения
-"/calculator/getexpressions"    // Получить список всех выражений
-"/calculator/values"            // Получение списка доступных операций со временем их выполения
-"/calculator/monitor"           // Мониторинг состояния агентов
-*/
-
 
 // Пустое сообщение
 message EmptyMessage {}
-// Сообщение с указанием имени пользователя
+// Запрос с указанием имени пользователя
 message UsernameOnlyRequest {
     string username = 1;
     bool perms = 2;

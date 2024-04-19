@@ -5,25 +5,28 @@ import (
 	"log"
 )
 
-const ( // Переменные для работы Postgres
-	DBHost string = "127.0.0.1" 		// ip адресс 
+// Переменные для работы Postgres
+const (
+  DBHost string = "127.0.0.1" // ip адресс 
 	DBPort uint16 = 5432				// Порт Postgres
 	DBUsername string = "postgres"		// Имя пользователя
-	DBPassword string = ""	// Пароль (если есть)
-	DBName string = "calc_test_database" // Имя БД
+	DBPassword string = ""      // Пароль (если есть)
+	DBName string = "calc_2_database" // Имя БД
 	DBNameDefault string = "postgres"	// Стандартное имя БД
 )
 
-const ( // Дефолтные временные переменные
-	T_sum	time.Duration = time.Millisecond * 500 // Время на выполнение сложения
+// Дефолтные временнЫе переменные
+const (
+  T_sum	time.Duration = time.Millisecond * 500 // Время на выполнение сложения
 	T_sub	time.Duration = time.Millisecond * 500 // Время на выполнение вычитания
 	T_mult	time.Duration = time.Millisecond * 500 // Время на выполнение умножения
 	T_div	time.Duration = time.Millisecond * 500 // Время на выполнение деления
 	T_agentTimeout time.Duration = time.Second * 5 // Таймаут для агентов
 )
 
-var ( // Переменные для работы логгера
-	LoggerFlagsDebug int = log.Lshortfile | log.Ltime	// Флаги обычного логгера
+// Переменные для работы логгера
+const (
+  LoggerFlagsDebug int = log.Lshortfile | log.Ltime	// Флаги обычного логгера
 	LoggerFlagsError int = log.Lshortfile | log.Ltime	// Флаги логгера ошибок
 	LoggerFlagsPings int = log.Ltime					// Флаги логгера хартбитов
 	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: backendlogs/debug.txt, 2: Stdout + debug.txt)
@@ -31,9 +34,15 @@ var ( // Переменные для работы логгера
 	LoggerOutputPings int = 1		// Вывод логгера ошибок (0: Stdout, 1: backendlogs/heartbeats.txt, 2: Stdout + heartbeats.txt)
 )
 
+// Переменные конфигурации агентов
 const (
 	N_agents int = 3	// Максимальное количество поднимаемых агентов
 	N_machines int = -1	// Количество поднимаемых вычеслителей-горутин на агента (-1 если можно поднимать сколько нужно без ограничений)
+)
+
+// Данные пользователей с правами администратора (подробнее в readme)
+var (
+  Admins = [...]struct{username, password string}{{"John Doe", "qwerty123"}, {"Aulus Agerius", "Lorem Ipsum"}}
 )
 
 /*
