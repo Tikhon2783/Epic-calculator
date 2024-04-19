@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"calculator/backend/cmd/agent"
-	shared "calculator/cmd"
-	"calculator/vars"
+	"calculator/internal/backend/application/agent"
+	"calculator/internal"
+	"calculator/internal/config"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"

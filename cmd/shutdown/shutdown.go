@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"calculator/cmd"
-	"calculator/vars"
+	"calculator/internal"
+	"calculator/internal/config"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"

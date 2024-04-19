@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"calculator/backend/cmd/orchestrator"
-	"calculator/cmd"
-	"calculator/vars"
+	"calculator/internal/backend/application/orchestrator"
+	"calculator/internal"
+	"calculator/internal/config"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
@@ -58,8 +58,10 @@ func main() {
 	logger.Println("Передаем управление оркестратору...")
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt)
-	go orchestrator.Launch() // Запускаем горутину оркестратора
-	select {                 // Ждем сигнала об остановке программы
+	go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
+
+	// Ждем сигнала об остановке программы
+	select {
 	case <-orchestrator.ServerExitChannel: // Сигнал от оркестратора
 		logger.Println("HTTP сервер прислал сигнал об остановке, закрываем БД и завершаем работу...")
 		fmt.Println("Похоже, HTTP сервер калькулятора остановил свою работу.")
@@ -74,24 +76,26 @@ func main() {
 		}
 		// <-orchestrator.ServerExitChannel
 	}
-	logger.Println("Hmmm")
+	logger.Println("...")
 	if db == nil {
-		fmt.Println("WHAT")
+		// Такого быть не должно
+		fmt.Println("!!! Ошибка с БД: пустой указатель !!!")
 	}
 	db.Close()
 	logger.Println(shared.OpenFiles)
 	time.Sleep(time.Millisecond * 1010)
 	for _, f := range shared.OpenFiles {
-		logger.Println("А файл то пустой", f.Name())
+		logger.Println("Файл пустой:", f.Name())
 		if f != nil {
-			log.Println("Закрываем файл", f.Name())
+			log.Println("Закрываем файл:", f.Name())
 			err = f.Close()
 			if err != nil {
-				log.Println(err)
+				logger.Println("Не смогли закрыть файл", f.Name())
+				loggerErr.Println(err)
 			}
 		}
 	}
-	// log.Print("Программа завершенна.")
+	logger.Print("Программа завершенна.")
 	fmt.Print("Программа завершенна.")
 	os.Exit(0)
 }
@@ -248,7 +252,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 	if err != nil {
 		panic(err)
 	}
-	f, err := os.Create("vars/db_existance.json")
+	f, err := os.Create("config/db_existance.json")
 	if err != nil {
 		panic(err)
 	}

@@ -1,7 +1,7 @@
 package shared
 
 import (
-	"calculator/vars"
+	"calculator/internal/config"
 	"encoding/json"
 	"log"
 	"os"
@@ -30,7 +30,7 @@ type Db_info struct {
 
 func GetDBSTate() Db_info { // Возвращает JSON структуру из файла db_existance.json
 	logger := GetDebugLogger()
-	db_existance, err := os.ReadFile("vars/db_existance.json")
+	db_existance, err := os.ReadFile("config/db_existance.json")
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func GetErrLogger() *log.Logger {
 	case 0:
 		return log.New(os.Stderr, "", vars.LoggerFlagsError)
 	case 1:
-		f, err := os.OpenFile("backend/logs/errors.txt", os.O_APPEND | os.O_WRONLY, 0600)
+		f, err := os.OpenFile("logs/errors.txt", os.O_APPEND | os.O_WRONLY, 0600)
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера ошибок, их логи записаны не будут.")
 			f = nil
@@ -70,7 +70,7 @@ func GetErrLogger() *log.Logger {
 		f.WriteString("\nНОВАЯ СЕССИЯ\n")
 		return log.New(f, "", vars.LoggerFlagsError)
 	case 2:
-		f, err := os.OpenFile("backend/logs/errors.txt", os.O_APPEND | os.O_WRONLY, 0600)
+		f, err := os.OpenFile("logs/errors.txt", os.O_APPEND | os.O_WRONLY, 0600)
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера ошибок, будет использоваться только Stderr.")
 			f = nil
@@ -87,7 +87,7 @@ func GetDebugLogger() *log.Logger {
 	case 0:
 		return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
 	case 1:
-		f, err := os.OpenFile("backend/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		f, err := os.OpenFile("logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
         if err != nil {
             log.Println(`Не смогли открыть файл для логгера дебага, логи записаны не будут.
 			Укажите Stdout в качестве вывода, чтобы выводить логи в консоль`)
@@ -98,7 +98,7 @@ func GetDebugLogger() *log.Logger {
         go autoFlushBuffer(writer)
         return log.New(writer, "", vars.LoggerFlagsDebug)
 	case 2:
-		f, err := os.OpenFile("backend/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		f, err := os.OpenFile("logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера дебага, будет использоваться только Stdout.")
 			f = nil
@@ -114,8 +114,8 @@ func GetHeartbeatLogger() *log.Logger {
 	case 0:
 		return log.New(os.Stdout, "PULSE ", vars.LoggerFlagsPings)
 	case 1:
-		// f, err := os.OpenFile("backend/logs/heartbeats.txt", os.O_APPEND | os.O_WRONLY, 0600)
-		f, err := os.Create("backend/logs/heartbeats.txt")
+		// f, err := os.OpenFile("logs/heartbeats.txt", os.O_APPEND | os.O_WRONLY, 0600)
+		f, err := os.Create("logs/heartbeats.txt")
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера пингов, их логи записаны не будут.")
 			f = nil
@@ -123,7 +123,7 @@ func GetHeartbeatLogger() *log.Logger {
 		OpenFiles = append(OpenFiles, f)
 		return log.New(f, "PULSE ", vars.LoggerFlagsPings)
 	case 2:
-		f, err := os.Create("backend/logs/heartbeats.txt")
+		f, err := os.Create("logs/heartbeats.txt")
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера пингов, будет использоваться только Stdout.")
 			f = nil
