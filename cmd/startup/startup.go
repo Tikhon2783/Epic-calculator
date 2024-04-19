@@ -80,6 +80,8 @@ func main() {
 	if db == nil {
 		// Такого быть не должно
 		fmt.Println("!!! Ошибка с БД: пустой указатель !!!")
+		logger.Println("!!! Ошибка с БД: пустой указатель !!!")
+		loggerErr.Println("!!! Ошибка с БД: пустой указатель !!!")
 	}
 	db.Close()
 	logger.Println(shared.OpenFiles)
