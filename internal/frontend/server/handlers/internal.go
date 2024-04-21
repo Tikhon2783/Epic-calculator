@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
-	"strings"
-	"time"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
 	"calculator/internal"
-	"calculator/internal/frontend/server/utils"
+	"calculator/internal/config"
 	"calculator/internal/errors"
+	"calculator/internal/frontend/server/utils"
+	"calculator/internal/jwt-stuff"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
@@ -52,7 +54,7 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения:", rec)
 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 		}
 	}()
@@ -127,7 +129,7 @@ func GetExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения:", rec)
 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 		}
 		logger.Println("Сервер обработал запрос на получение списка выражений.")
@@ -204,7 +206,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на значения времени.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на значения времени:", rec)
 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 		}
 	}()
@@ -272,7 +274,7 @@ func KillAgentHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на убийство агента.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на убийство агента:", rec)
 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 		}
 	}()
@@ -342,16 +344,193 @@ func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Закрыли HTTP сервер.")
 }
 
-// Хендлер на endpoint страницы аутентификации
-func AuthHandlerInternal(w http.ResponseWriter, r *http.Request) {
-	// TODO
+// Хендлер регистрации
+func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя:", rec)
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
+
+	logger.Println("Сервер получил запрос на регистрацию пользователя.")
+	// Метод должен быть POST
+	if r.Method != http.MethodPost {
+		logger.Println("Неправильный метод, запрос не обрабатывается.")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: ошибка парсинга запроса.")
+		http.Error(w, "Ошибка парсинга запроса", http.StatusInternalServerError)
+		return
+	}
+
+	username := r.PostForm.Get("username")
+	password := r.PostForm.Get("password")
+
+	// Проверяем, существует ли уже пользователь с таким именем
+	var exists bool
+	logger.Println("Hello postgresql")
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)", username).Scan(&exists)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: ошибка проверки имени пользователя в базе данных.")
+		http.Error(w, "Ошибка проверки имени пользователя в базе данных", http.StatusInternalServerError)
+		return
+	}
+	logger.Println("Bye postgresql")
+	if exists {
+		logger.Println("Пользователь уже существует, возвращаем код 409.")
+		http.Error(w, "user already exists", http.StatusConflict)
+		return
+	}
+
+	// Генерируем хеш
+	hashedPswd, err := utils.GenerateHashFromPswd(password)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Ошибка при хешировании пароля:", err)
+		http.Error(w, "hashing error", http.StatusInternalServerError)
+	}
+
+	// Записываем пользователя в БД
+	_, err = db.Exec(
+		`INSERT INTO users (username, password_hash) VALUES ($1, $2);`,
+		username,
+		hashedPswd,
+	)
+	if err != nil {
+		panic(err)
+	}
+	logger.Println("Записали пользователя в БД.")
+
+	// Создаем схему для пользователя
+	_, err = db.Exec("CREATE SCHEMA $1;", username)
+	if err != nil {
+		panic(err)
+	}
+	// Создаем таблицу в созданной схеме
+	_, err = db.Exec(
+		fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", username)+
+		`action varchar (15) NOT NULL,
+		time integer NOT NULL);`,
+	)
+	if err != nil {
+		panic(err)
+	}
+	_, err = db.Prepare("fill_times", "INSERT INTO time_vars (action, time) VALUES ($1, $2);")
+	if err != nil {
+		panic(err)
+	}
+	for i := 0; i < 4; i++ {
+		_, err = db.Exec("fill_times",
+			[]string{"summation", "substraction", "multiplication", "division"}[i],
+			fmt.Sprint(int([]time.Duration{
+				vars.T_sum,
+				vars.T_sub,
+				vars.T_mult,
+				vars.T_div}[i])/1000000),
+		)
+		if err != nil {
+			loggerErr.Panic("не смогли добавить время в БД (", []string{
+				"summation",
+				"substraction",
+				"multiplication",
+				"division"}[i], "): ", err)
+		}
+	}
+	_, err = db.Exec("fill_times", "agent_timeout", vars.T_agentTimeout / 1_000_000)
+	if err != nil {
+		loggerErr.Fatalln("не смогли добавить время в БД (таймаут агентов):", err)
+	}
+	logger.Printf("Создали таблицу с переменными для пользователя '%s'.", username)
+	logger.Println("Пользователь зарегистрирован, производим процесс входа...")
+
+	http.Redirect(w, r, "../signin", http.StatusSeeOther)
 }
 
-func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
-	// TODO
+// Хендлер на endpoint входа
+func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на вход пользователя:", rec)
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
+
+	logger.Println("Сервер получил запрос на вход пользователя.")
+	// Метод должен быть POST
+	if r.Method != http.MethodPost {
+		logger.Println("Неправильный метод, запрос не обрабатывается.")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: ошибка парсинга запроса.")
+		http.Error(w, "Ошибка парсинга запроса", http.StatusInternalServerError)
+		return
+	}
+
+	username := r.PostForm.Get("username")
+	password := r.PostForm.Get("password")
+
+	// Проверяем, существует ли пользователь с таким именем
+	var exists bool
+	logger.Println("Hello postgresql")
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)", username).Scan(&exists)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: ошибка проверки имени пользователя в базе данных:", err)
+		http.Error(w, "Ошибка проверки имени пользователя в базе данных", http.StatusInternalServerError)
+		return
+	}
+	logger.Println("Bye postgresql")
+	if !exists {
+		logger.Println("Пользователь с таким именем не существует, возвращаем код 401.")
+		http.Error(w, "user doesn't exists", http.StatusUnauthorized)
+		return
+	}
+
+	// Достаем хеш пароля из БД
+	var hash string
+	err = db.QueryRow(
+		`SELECT password_hash FROM users WHERE username=$1`, username).Scan(&hash)
+	if err != nil {
+		panic(err)
+	}
+	// Проверяем пароль
+	err = utils.CompareHashAndPassword(hash, password)
+	if err != nil {
+		logger.Println("Хеш пароля не совпадает с хешем из БД, возвращаем код 401.")
+		http.Error(w, "password is incorrect", http.StatusUnauthorized)
+		return
+	}
+
+	// Генерируем JWT
+	cookie, err := jwtstuff.GenerateToken(username)
+	if err != nil {
+		logger.Println("Ошибка генерации токена, возвращаем код 400")
+		loggerErr.Println("Ошибка генерации токена:", err)
+		http.Error(w, "error generating jwt token", http.StatusBadRequest)
+		return
+	}
+	http.SetCookie(w, cookie)
+	logger.Println("Записали jwt токен в cookie.")
 }
 
 // Хендлер на endpoint выхода из аккаунта
 func LogOutHandlerInternal(w http.ResponseWriter, r *http.Request) {
-	// TODO
+	http.SetCookie(w, &http.Cookie{
+		Name:    "token",
+		Expires: time.Now(),
+	})
 }

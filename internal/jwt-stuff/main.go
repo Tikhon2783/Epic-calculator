@@ -34,6 +34,7 @@ func GenerateToken(username string) (*http.Cookie, error) {
 		Name:    "token",
 		Value:   tokenString,
 		Expires: expirationTime,
+		HttpOnly: true,
 	}, nil
 }
 

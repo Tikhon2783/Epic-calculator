@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"calculator/internal/backend/application/orchestrator"
 	"calculator/internal"
 	"calculator/internal/config"
 	"calculator/internal/frontend/server"
+	// "calculator/internal/backend/application"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
@@ -29,8 +29,6 @@ var (
 
 func main() {
 	logger.Println("Запускаем калькулятор...")
-	application.Launch()
-	return
 
 	// Проверяем, существует ли БД / возобновляем работу или начинаем заново
 	db_info := shared.GetDBSTate() // Получаем JSON структуру из файла db_existance.json
@@ -62,24 +60,24 @@ func main() {
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt)
 	// go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
-
+	serverExitChannel := frontserver.LaunchServer()
 
 	// Ждем сигнала об остановке программы
 	select {
-	case <-orchestrator.ServerExitChannel: // Сигнал от оркестратора
+	case <-serverExitChannel: // Сигнал от сервера
 		logger.Println("HTTP сервер прислал сигнал об остановке, закрываем БД и завершаем работу...")
 		fmt.Println("Похоже, HTTP сервер калькулятора остановил свою работу.")
-		if err = orchestrator.Srv.Close(); err != nil {
+		if err = frontserver.Srv.Close(); err != nil {
 			loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
 		}
 	case <-exitChannel: // Сигнал от пользователя
 		logger.Println("Пользователь прислал сигнал об остановке, закрываем БД и завершаем работу...")
 		fmt.Println("Поймал попытку завершить работу с ^C :)")
-		if err = orchestrator.Srv.Close(); err != nil {
+		if err = frontserver.Srv.Close(); err != nil {
 			loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
 		}
-		// <-orchestrator.ServerExitChannel
 	}
+
 	logger.Println("...")
 	if db == nil {
 		// Такого быть не должно
@@ -88,19 +86,21 @@ func main() {
 		loggerErr.Println("!!! Ошибка с БД: пустой указатель !!!")
 	}
 	db.Close()
+	// Закрываем файлы логов
 	logger.Println(shared.OpenFiles)
 	time.Sleep(time.Millisecond * 1010)
 	for _, f := range shared.OpenFiles {
-		logger.Println("Файл пустой:", f.Name())
 		if f != nil {
 			log.Println("Закрываем файл:", f.Name())
-			err = f.Close()
-			if err != nil {
+			if err = f.Close(); err != nil {
 				logger.Println("Не смогли закрыть файл", f.Name())
 				loggerErr.Println(err)
 			}
+		} else {
+			logger.Println("Файл пустой:", f.Name())	
 		}
 	}
+
 	logger.Print("Программа завершенна.")
 	fmt.Print("Программа завершенна.")
 	os.Exit(0)
@@ -167,7 +167,8 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		func() {
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS requests (
-				request_id integer PRIMARY KEY,
+				request_id char(36) PRIMARY KEY,
+				username varchar(50) NOT NULL
 				expression varchar(100) NOT NULL,
 				calculated boolean DEFAULT FALSE,
 				result varchar DEFAULT 0,
@@ -205,13 +206,27 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		}()
 	}
 
+	if !db_info.T_users {
+		wg.Add(1)
+		go func() {
+			_, err = db.Exec(
+				`CREATE TABLE IF NOT EXISTS users (
+				username varchar(50) PRIMARY KEY
+				password_hash varchar(50) NOT NULL
+				);`,
+			)
+			if err != nil {
+				panic(err)
+			}
+			db_info.T_agent = true
+			logger.Println("Создали таблицу с процессами агента.")
+			wg.Done()
+		}()
+	}
+
 	if !db_info.T_vars {
 		wg.Add(1)
 		go func() {
-			// dbT, err := db.Begin()
-			// if err != nil {
-			// 	panic(err)
-			// }
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS time_vars (
 				action varchar (15) NOT NULL,

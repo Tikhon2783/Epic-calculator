@@ -1,4 +1,4 @@
-package application
+package frontserver
 
 import (
 	"log"
@@ -21,7 +21,7 @@ var (
 )
 
 // Горутина хоста HTTP сервера
-func Launch() {
+func LaunchServer() chan os.Signal {
 	logger.Println("Настраиваем HTTP сервер...")
 
 	// Настраиваем обработчики для разных путей
@@ -58,7 +58,7 @@ func Launch() {
 		"/calculator/internal/monitor",
 		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.MonitorHandlerInternal)),
 	)
-	mux.HandleFunc("/calculator/internal/signin", handlers.AuthHandlerInternal)			// Аутентификация пользователя
+	mux.HandleFunc("/calculator/internal/signin", handlers.LogInHandlerInternal)		// Аутентификация пользователя
 	mux.HandleFunc("/calculator/internal/register", handlers.RegisterHandlerInternal)	// Регистрация пользователя
 	mux.HandleFunc("/calculator/internal/logout", handlers.LogOutHandlerInternal)		// Выход из аккаунта
 
@@ -95,14 +95,17 @@ func Launch() {
 		ErrorLog: loggerErr,
 	}
 
-	// Запускаем сервер
-	logger.Println("Запускаем HTTP сервер...")
-	fmt.Println("HTTP сервер готов к работе!")
-	if err = Srv.ListenAndServe(); err != nil {
-		loggerErr.Println("HTTP сервер накрылся:", err)
-	}
+	go func() {
+		// Запускаем сервер
+		logger.Println("Запускаем HTTP сервер...")
+		fmt.Println("HTTP сервер готов к работе!")
+		if err = Srv.ListenAndServe(); err != nil {
+			loggerErr.Println("HTTP сервер накрылся:", err)
+		}
 
-	logger.Println("Отправляем сигнал прерывания...")
-	ServerExitChannel <- os.Interrupt
-	logger.Println("Отправили сигнал прерывания.")
+		logger.Println("Отправляем сигнал прерывания...")
+		ServerExitChannel <- os.Interrupt
+		logger.Println("Отправили сигнал прерывания.")
+	}()
+	return ServerExitChannel
 }

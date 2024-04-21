@@ -23,10 +23,11 @@ var (
 )
 
 type Db_info struct {
-	Db         bool
-	T_requests bool
-	T_agent    bool
-	T_vars     bool
+	Db			bool
+	T_requests	bool
+	T_agent		bool
+	T_vars		bool
+	T_users		bool
 }
 
 func GetDBSTate() Db_info { // Возвращает JSON структуру из файла db_existance.json
