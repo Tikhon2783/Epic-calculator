@@ -58,7 +58,9 @@ func main() {
 	logger.Println("Передаем управление оркестратору...")
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt)
-	go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
+	// go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
+	
+	return
 
 	// Ждем сигнала об остановке программы
 	select {

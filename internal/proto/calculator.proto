@@ -116,10 +116,10 @@ service OrchestratorService {
     rpc KillAgent (EmptyMessage) returns (AgentAndErrorResponse);
     rpc ReviveAgent (EmptyMessage) returns (AgentAndErrorResponse);
     rpc SendExp (ExpSendRequest) returns (AgentAndErrorResponse);
-    rpc CheckExp (ExpCheckRequest) returns (ExpCheckResponse);
-    rpc GetExps (UsernameOnlyRequest) returns (ExpsGetResponse);
-    rpc GetTimes (UsernameOnlyRequest) returns (TimesResponse);
-    rpc SetTimes (TimesSetRequest) returns (TimesSetResponse);
+    // rpc CheckExp (ExpCheckRequest) returns (ExpCheckResponse);
+    // rpc GetExps (UsernameOnlyRequest) returns (ExpsGetResponse);
+    // rpc GetTimes (UsernameOnlyRequest) returns (TimesResponse);
+    // rpc SetTimes (TimesSetRequest) returns (TimesSetResponse);
     rpc Monitor (EmptyMessage) returns (MonitorResponse);
 
     // методы для общения агентов с оркестратором

@@ -1029,7 +1029,7 @@ func MonitorAgents(m *AgentsManager) {
 	}
 }
 
-// Хендлер на endpoint убийства оркестратора
+// Хендлер на endpoint остановки программы
 func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1057,7 +1057,6 @@ func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
 	logger.Println("Закрыли HTTP сервер.")
-	// Агенты сами отключатся при остановке программы
 }
 
 /*

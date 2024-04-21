@@ -28,10 +28,12 @@ const (
 const (
   LoggerFlagsDebug int = log.Lshortfile | log.Ltime	// Флаги обычного логгера
 	LoggerFlagsError int = log.Lshortfile | log.Ltime	// Флаги логгера ошибок
-	LoggerFlagsPings int = log.Ltime					// Флаги логгера хартбитов
-	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: backendlogs/debug.txt, 2: Stdout + debug.txt)
-	LoggerOutputError int = 2		// Вывод логгера ошибок (0: Stderr, 1: backendlogs/errors.txt, 2: Stderr + errors.txt)
-	LoggerOutputPings int = 1		// Вывод логгера ошибок (0: Stdout, 1: backendlogs/heartbeats.txt, 2: Stdout + heartbeats.txt)
+	LoggerFlagsPings int = log.Ltime                  // Флаги логгера хартбитов
+  LoggerFlagsQueue int = log.Ltime                  // Флаги логгера обращений агентов к очереди выражений
+	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: internal/logs/debug.txt, 2: Stdout + debug.txt)
+	LoggerOutputError int = 2		// Вывод логгера ошибок (0: Stderr, 1: internal/logs/errors.txt, 2: Stderr + errors.txt)
+	LoggerOutputPings int = 1		// Вывод логгера ошибок (0: Stdout, 1: internal/logs/heartbeats.txt, 2: Stdout + heartbeats.txt)
+  LoggerOutputQueue int = 1		// Вывод логгера ошибок (0: Stdout, 1: internal/logs/queue.txt, 2: Stdout + queue.txt)
 )
 
 // Переменные конфигурации агентов
@@ -42,7 +44,16 @@ const (
 
 // Данные пользователей с правами администратора (подробнее в readme)
 var (
-  Admins = [...]struct{username, password string}{{"John Doe", "qwerty123"}, {"Aulus Agerius", "Lorem Ipsum"}}
+  Admins = [...]struct{username, password string}{
+    {"John Doe", "qwerty123"},
+    {"Aulus Agerius", "Lorem Ipsum"},
+  }
+)
+
+// Константы JWT
+const (
+  SecretJWTSignature string = "goroutine"           // Подпись
+  JWTValidyDuration time.Duration = 5 * time.Minute // Время действия токена
 )
 
 /*

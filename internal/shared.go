@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	Logger           *log.Logger = GetDebugLogger()
+	Logger			 *log.Logger = GetDebugLogger()
 	LoggerErr        *log.Logger = GetErrLogger()
 	LoggerHeartbeats *log.Logger = GetHeartbeatLogger()
+	LoggerQueue		 *log.Logger = GetQueueLogger()
 	Db               *pgx.ConnPool
 	OpenFiles		 []*os.File = make([]*os.File, 0)
 )
@@ -130,6 +131,31 @@ func GetHeartbeatLogger() *log.Logger {
 		}
 		OpenFiles = append(OpenFiles, f)
 		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsPings)
+	}
+	return log.Default()
+}
+
+func GetQueueLogger() *log.Logger {
+	switch vars.LoggerOutputQueue {
+	case 0:
+		return log.New(os.Stdout, "", vars.LoggerFlagsQueue)
+	case 1:
+		// f, err := os.OpenFile("logs/heartbeats.txt", os.O_APPEND | os.O_WRONLY, 0600)
+		f, err := os.Create("logs/queue.txt")
+		if err != nil {
+			log.Println("Не смогли открыть файл для логгера обращений агентов, их логи записаны не будут.")
+			f = nil
+		}
+		OpenFiles = append(OpenFiles, f)
+		return log.New(f, "PULSE ", vars.LoggerFlagsQueue)
+	case 2:
+		f, err := os.Create("logs/queue.txt")
+		if err != nil {
+			log.Println("Не смогли открыть файл для логгера обращений агентов, будет использоваться только Stdout.")
+			f = nil
+		}
+		OpenFiles = append(OpenFiles, f)
+		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsQueue)
 	}
 	return log.Default()
 }
