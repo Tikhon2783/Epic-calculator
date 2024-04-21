@@ -96,7 +96,7 @@ func GetDebugLogger() *log.Logger {
         }
         OpenFiles = append(OpenFiles, f)
         writer := bufio.NewWriter(f)
-        go autoFlushBuffer(writer)
+        // go autoFlushBuffer(writer)
         return log.New(writer, "", vars.LoggerFlagsDebug)
 	case 2:
 		f, err := os.OpenFile("logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)

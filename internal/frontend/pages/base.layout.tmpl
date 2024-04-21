@@ -5,7 +5,141 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
         <title>{{template "title" .}}</title>
-        <link rel="stylesheet" href="style.css">
+        <style>
+            table {
+            border-collapse: separate;
+            border: 2px solid rgb(200,200,200);
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+            }
+
+            td, th {
+            border: 1px solid rgb(190,190,190);
+            padding: 10px 20px;
+            }
+
+            th {
+            background-color: rgb(235,235,235);
+            }
+
+            td {
+            text-align: center;
+            }
+
+            tr:nth-child(even) td {
+            background-color: rgb(250,250,250);
+            }
+
+            tr:nth-child(odd) td {
+            background-color: rgb(245,245,245);
+            }
+
+            caption {
+            padding: 10px;
+            }
+
+            body {
+                background-color: #333;
+            }
+
+            header {
+            display: flex;
+            height: 100px;
+            background-color: rgb(30, 30, 30);
+            }
+
+            #authForm {
+            position: fixed;
+            height: 220px;
+            width: 220px;
+            padding: 15% 40%;
+            }
+
+            #register {
+                padding: 0.5px 10px;
+                background: white;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+
+            #login {
+                padding: 0.5px 10px;
+                background: white;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+
+
+            /* Import Google font - Poppins */
+            @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@200;300;400;500;600;700&display=swap");
+            * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Poppins", sans-serif;
+            }
+            a {
+            text-decoration: none;
+            }
+            .nav {
+            max-width: 1100px;
+            width: 100%;
+            margin: 0 auto;
+            }
+
+            .nav,
+            .nav_item {
+            display: flex;
+            height: 100%;
+            align-items: center;
+            justify-content: space-between;
+            }
+            .nav_logo,
+            .nav_link,
+            .profile-username-btn,
+            .button {
+            color: #fff;
+            }
+            .nav_logo {
+            font-size: 25px;
+            }
+            .nav_item {
+            column-gap: 25px;
+            }
+            .nav_link:hover {
+            color: #d9d9d9;
+            }
+
+            .profile-username-btn {
+            padding: 10px 32px;
+            border: 2px solid #fff;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            }
+
+            .logout-btn {
+            position: relative;
+            top: 55%;
+            padding: 10px 30px;
+            background-color: rgb(128, 128, 128, 0.3);
+            border: 2.5px solid black;
+            border-radius: 5px;
+            cursor: pointer;
+            
+            }
+
+            .buttons {
+            position: fixed;
+            top: 5%;
+            width: 8%;
+            }
+
+            .profile-username-btn:active {
+            transform: scale(0.98);
+            }
+        </style>
     </head>
     <body>
         <!-- Header -->
@@ -15,7 +149,48 @@
             {{template "main" .}}
         </main>
 
-        <script src="script.js"></script>
+        <script src="/scripts/script.js"></script>
     </body>
+
+    <script>
+    {{template "custom" .}}
+    document.addEventListener('DOMContentLoaded', function() {
+        const loggedInUser = sessionStorage.getItem('loggedInUser');
+        const profileUsername = document.querySelector('.profile-username-btn');
+        const logoutButton = document.querySelector('.logout-btn');
+        console.log("page loaded", loggedInUser)
+
+        document.querySelector("main").addEventListener("click", function () {
+            logoutButton.style.display = "none";
+        });
+
+        if (loggedInUser) {
+            // User is logged in
+            profileUsername.textContent = loggedInUser;
+
+            profileUsername.addEventListener('click', function() {
+                logoutButton.style.display = 'block';
+                
+                logoutButton.addEventListener('click', function() {
+                    // Perform logout functionality here (e.g., clearing session, redirecting, etc.)
+                    sessionStorage.removeItem('loggedInUser');
+                    logoutButton.style.display = 'none';
+                    profileUsername.textContent = 'Log in';
+                    profileUsername.addEventListener('click', function() {
+                        location.replace("../calculator/auth")
+                    });
+                    alert('Logged out.');
+                });
+            });
+        } else {
+            // Simulate login process (you should replace this with actual login functionality)
+            profileUsername.textContent = "Sign In";
+        
+            profileUsername.addEventListener('click', function() {
+                location.replace("../calculator/auth")
+            });
+        }
+    });
+</script>
 </html>
 {{end}}

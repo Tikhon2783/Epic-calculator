@@ -4,5 +4,38 @@
  
 {{define "main"}}
 <h2>Авторизация</h2>
-<p>Пока здесь ничего нет!</p>
+<p>Заполните все поля</p>
+<form id="authForm">
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" placeholder="Enter username" required><br><br>
+    
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" placeholder="Enter password" required><br><br>
+    
+    <button type="submit" id="login" onclick="submitForm(event)">Log In</button>
+    <button type="submit" id="register" onclick="submitForm(event)">Register</button>
+</form>
+{{end}}
+
+{{define "custom"}}
+function submitForm(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    
+    if (!username || !password) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    const form = document.getElementById('authForm');
+    const formData = new FormData(form);
+    
+    console.log("Pretending to send stuf...")
+    console.log(formData)
+    sessionStorage.setItem("loggedInUser", username)
+    console.log("stored:", sessionStorage.getItem('loggedInUser'))
+    location.reload();
+}
 {{end}}

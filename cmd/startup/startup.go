@@ -12,6 +12,7 @@ import (
 	"calculator/internal/backend/application/orchestrator"
 	"calculator/internal"
 	"calculator/internal/config"
+	"calculator/internal/frontend/server"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
@@ -28,6 +29,8 @@ var (
 
 func main() {
 	logger.Println("Запускаем калькулятор...")
+	application.Launch()
+	return
 
 	// Проверяем, существует ли БД / возобновляем работу или начинаем заново
 	db_info := shared.GetDBSTate() // Получаем JSON структуру из файла db_existance.json
@@ -59,8 +62,7 @@ func main() {
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt)
 	// go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
-	
-	return
+
 
 	// Ждем сигнала об остановке программы
 	select {

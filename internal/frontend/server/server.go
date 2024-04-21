@@ -82,9 +82,9 @@ func Launch() {
 		middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.MonitorHandlerExternal)),
 	)
 	// Страница входа/регистрации
-	mux.Handle(
+	mux.HandleFunc(
 		"/calculator/auth",
-		 middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.AuthHandlerExternal)),
+		 handlers.AuthHandlerExternal,
 	)
 
 
