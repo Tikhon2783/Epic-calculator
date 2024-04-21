@@ -44,7 +44,7 @@ const (
 
 // Данные пользователей с правами администратора (подробнее в readme)
 var (
-  Admins = [...]struct{username, password string}{
+  Admins = [...]struct{Username, Password string}{
     {"John Doe", "qwerty123"},
     {"Aulus Agerius", "Lorem Ipsum"},
   }

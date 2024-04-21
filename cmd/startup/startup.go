@@ -12,6 +12,7 @@ import (
 	"calculator/internal"
 	"calculator/internal/config"
 	"calculator/internal/frontend/server"
+	"calculator/internal/frontend/server/utils"
 	// "calculator/internal/backend/application"
 
 	"github.com/jackc/pgx"
@@ -211,58 +212,98 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		go func() {
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS users (
-				username varchar(50) PRIMARY KEY
-				password_hash varchar(50) NOT NULL
+				username varchar(50) PRIMARY KEY,
+				password_hash varchar(50) NOT NULL,
+				perms bool DEFAULT FALSE
 				);`,
 			)
 			if err != nil {
 				panic(err)
 			}
 			db_info.T_agent = true
-			logger.Println("Создали таблицу с процессами агента.")
+			logger.Println("Создали таблицу с пользователями.")
 			wg.Done()
 		}()
 	}
 
 	if !db_info.T_vars {
+		// Записываем пользователей с правами
+		for _, u := range vars.Admins {
+			wg.Add(1)
+			go func(u struct{Username string; Password string}) {
+				// Генерируем хеш
+				hashedPswd, err := utils.GenerateHashFromPswd(u.Password)
+				if err != nil {
+					logger.Println("Ошибка при хешировании пароля, таблица не создана.")
+					loggerErr.Println("Ошибка при хешировании пароля:", err)
+				}
+
+				// Записываем пользователя в БД
+				_, err = db.Exec(
+					`INSERT INTO users (username, password_hash, perms) VALUES ($1, $2, TRUE);`,
+					u.Username,
+					hashedPswd,
+				)
+				if err != nil {
+					panic(err)
+				}
+				logger.Printf("Записали пользователя %s в БД.", u.Username)
+
+				// Создаем схему для пользователя
+				_, err = db.Exec("CREATE SCHEMA $1;", u.Username)
+				if err != nil {
+					panic(err)
+				}
+				// Создаем таблицу в созданной схеме
+				_, err = db.Exec(
+					fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", u.Username)+
+					`action varchar (15) NOT NULL,
+					time integer NOT NULL
+					);`,
+				)
+				if err != nil {
+					panic(err)
+				}
+				_, err = db.Prepare("fill_times", "INSERT INTO time_vars (action, time) VALUES ($1, $2);")
+				if err != nil {
+					panic(err)
+				}
+				for i := 0; i < 4; i++ {
+					_, err = db.Exec("fill_times",
+						[]string{"summation", "substraction", "multiplication", "division"}[i],
+						fmt.Sprint(int([]time.Duration{
+							vars.T_sum,
+							vars.T_sub,
+							vars.T_mult,
+							vars.T_div}[i])/1000000),
+					)
+					if err != nil {
+						loggerErr.Panic("не смогли добавить время в БД (", []string{
+							"summation",
+							"substraction",
+							"multiplication",
+							"division"}[i], "): ", err)
+					}
+				}
+				logger.Printf("Создали таблицу с переменными для пользователя '%s'.", u.Username)
+				wg.Done()
+			}(u)
+		}
+	}
+
+	if db_info.T_timeout {
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			_, err = db.Exec(
-				`CREATE TABLE IF NOT EXISTS time_vars (
-				action varchar (15) NOT NULL,
-				time integer NOT NULL);`,
+				`CREATE TABLE IF NOT EXISTS agent_timeout (time integer NOT NULL);`,
 			)
 			if err != nil {
 				panic(err)
 			}
-			_, err := db.Prepare("fill_times", "INSERT INTO time_vars (action, time) VALUES ($1, $2)")
-			if err != nil {
-				panic(err)
-			}
-			for i := 0; i < 4; i++ {
-				_, err = db.Exec("fill_times",
-					[]string{"summation", "substraction", "multiplication", "division"}[i],
-					fmt.Sprint(int([]time.Duration{
-						vars.T_sum,
-						vars.T_sub,
-						vars.T_mult,
-						vars.T_div}[i])/1000000),
-				)
-				if err != nil {
-					loggerErr.Fatal("не смогли добавить время в БД (", []string{
-						"summation",
-						"substraction",
-						"multiplication",
-						"division"}[i], "): ", err)
-				}
-			}
-			_, err = db.Exec("fill_times", "agent_timeout", vars.T_agentTimeout / 1000000)
-			if err != nil {
-				loggerErr.Fatalln("не смогли добавить время в БД (таймаут агентов):", err)
-			}
-			db_info.T_vars = true
-			logger.Println("Создали таблицу с переменными.")
-			wg.Done()
+			_, err = db.Exec("INSERT INTO agent_timeout VALUES")
+			db_info.T_agent = true
+			logger.Println("Создали таблицу с пользователями.")
 		}()
 	}
 

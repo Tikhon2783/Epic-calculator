@@ -8,8 +8,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"encoding/json"
 
 	"calculator/internal"
+	"calculator/internal/backend/application/orchestrator"
 	"calculator/internal/config"
 	"calculator/internal/errors"
 	"calculator/internal/frontend/server/utils"
@@ -212,61 +214,94 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	logger.Println("Сервер получил запрос на получение/изменение значений времени.")
+	// Проверяем пользователя на наличие прав изменения таймаута
+	username := r.Header.Get("X-Username")
+	var perms bool
+	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
 
-	// Метод должен быть GET
-	if r.Method != http.MethodGet {
+	// Если метод POST, обновляем значения
+	if r.Method == http.MethodPost {
+		// Получаем аргументы запроса
+		err := r.ParseForm()
+		if err != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: ошибка парсинга запроса на изменение переменных.")
+			http.Error(w, "Ошибка парсинга запроса", http.StatusInternalServerError)
+			return
+		}
+		tSum := r.PostForm.Get("sum")
+		tSub := r.PostForm.Get("sub")
+		tMult := r.PostForm.Get("mult")
+		tDiv := r.PostForm.Get("div")
+		tAgent := r.PostForm.Get("timeout")
+
+		// Выводим в консоль калькулятора полученные значения для упрощенного дебага
+		fmt.Print("'", strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n")
+		logger.Print(
+			"Сервер: полученные значения на изменение(sum sub mul div timeout): '",
+			strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n",
+		)
+
+		// Изменяем значения
+		for i, val := range []string{tSum, tSub, tMult, tDiv, tAgent} {
+			if val == "" { // Не получили запрос на изменение данной переменной
+				continue
+			}
+			fmt.Printf("'%s'\n", val)
+			t, err := time.ParseDuration(val)
+			if err != nil {
+				logger.Println("Сервер: ошибка парсинга времени")
+				loggerErr.Printf(
+					"Сервер: ошибка парсинга (%s): %s",
+					t,
+					err,
+				)
+				continue
+			}
+
+			// Проверяем на валидность значения
+			if t < 0 {
+				fmt.Fprintf(
+					w,
+					"Время на %s было введено отрицательное, пропускаем...",
+					[]string{"сложение", "вычитание", "умножение", "деление", "таймаут"}[i],
+				)
+				continue
+			}
+
+			// Обновляем значение в БД
+			_, err = db.Exec(
+				`UPDATE time_vars
+					SET time = $2
+					WHERE action = $1`,
+				[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
+				t/1_000_000,
+			)
+			if err != nil {
+				logger.Println("Оркестратор: ошибка изменения значения в БД")
+				loggerErr.Printf(
+					"Оркестратор: ошибка изменения значения %s на %s в БД: %s",
+					err,
+					[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
+					t,
+				)
+			}
+		}
+	// Если метод не POST и не GET, возвращаем ошибку
+	} else if r.Method != http.MethodGet {
 		logger.Println("Неправильный метод, выражение не обрабатывается.")
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Получаем аргументы запроса
-	tSum := r.URL.Query().Get("sum")
-	tSub := r.URL.Query().Get("sub")
-	tMult := r.URL.Query().Get("mult")
-	tDiv := r.URL.Query().Get("div")
-	tAgent := r.URL.Query().Get("timeout")
+	// Получаем значения и возвращаем
+	times := orchestrator.GetTimes()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
-	// Выводим в консоль калькулятора полученные значения для упрощенного дебага
-	fmt.Print("'", strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n")
-	logger.Print(
-		"Сервер: полученные значения на изменение(sum sub mul div timeout): '",
-		strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n",
-	)
-
-	// Изменяем значения
-	for i, val := range []string{tSum, tSub, tMult, tDiv, tAgent} {
-		if val == "" { // Не получили запрос на изменение данной переменной
-			continue
-		}
-		fmt.Printf("'%s'\n", val)
-		t, err := time.ParseDuration(val)
-		if err != nil {
-			logger.Println("Сервер: ошибка парсинга времени")
-			loggerErr.Printf(
-				"Сервер: ошибка парсинга (%s): %s",
-				t,
-				err,
-			)
-			continue
-		}
-
-		// Проверяем на валидность значения
-		if t < 0 {
-			fmt.Fprintf(
-				w,
-				"Время на %s было введено отрицательное, пропускаем...",
-				[]string{"сложение", "вычитание", "умножение", "деление", "таймаут"}[i],
-			)
-			continue
-		}
-
-		// Обновляем значение в БД
-		// TODO
+	if err := json.NewEncoder(w).Encode(times); err != nil {
+		http.Error(w, "Error encoding default data", http.StatusInternalServerError)
 	}
-
-	// Получаем значения и возвращаем пользователю
-	// TODO
 }
 
 // Хендлер на endpoint убийства агента
@@ -407,7 +442,7 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	logger.Println("Записали пользователя в БД.")
+	logger.Printf("Записали пользователя %s в БД.", username)
 
 	// Создаем схему для пользователя
 	_, err = db.Exec("CREATE SCHEMA $1;", username)
@@ -418,7 +453,8 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec(
 		fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", username)+
 		`action varchar (15) NOT NULL,
-		time integer NOT NULL);`,
+		time integer NOT NULL
+		);`,
 	)
 	if err != nil {
 		panic(err)
@@ -443,10 +479,6 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 				"multiplication",
 				"division"}[i], "): ", err)
 		}
-	}
-	_, err = db.Exec("fill_times", "agent_timeout", vars.T_agentTimeout / 1_000_000)
-	if err != nil {
-		loggerErr.Fatalln("не смогли добавить время в БД (таймаут агентов):", err)
 	}
 	logger.Printf("Создали таблицу с переменными для пользователя '%s'.", username)
 	logger.Println("Пользователь зарегистрирован, производим процесс входа...")

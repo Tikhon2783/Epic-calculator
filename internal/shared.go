@@ -28,6 +28,7 @@ type Db_info struct {
 	T_agent		bool
 	T_vars		bool
 	T_users		bool
+	T_timeout	bool
 }
 
 func GetDBSTate() Db_info { // Возвращает JSON структуру из файла db_existance.json

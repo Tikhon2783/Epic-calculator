@@ -512,7 +512,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Получаем значения и возвращаем пользователю
-	times := getTimes()
+	times := GetTimes()
 	printTable([][]string{
 		{"операция", "время"},
 		{"сложение", fmt.Sprint(times.Sum)},
@@ -524,7 +524,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 }
 
 // Функция для получения времени операций из БД
-func getTimes() *agent.Times {
+func GetTimes() *agent.Times {
 	rows, err := db.Query("SELECT action, time from time_vars;")
 	if err != nil {
 		panic(err)
@@ -725,7 +725,7 @@ func Launch() {
 		logger.Println("Отправили сигнал прерывания.")
 	}
 
-	getTimes()
+	GetTimes()
 	mu = &sync.RWMutex{}
 	manager = newAgentsManager() // Мониторинг агентов для запущенного оркестратора
 

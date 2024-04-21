@@ -28,11 +28,11 @@ var (
 )
 
 type Times struct {
-	Sum          time.Duration
-	Sub          time.Duration
-	Mult         time.Duration
-	Div          time.Duration
-	AgentTimeout time.Duration
+	Sum          time.Duration `json:"sum"`
+	Sub          time.Duration `json:"sub"`
+	Mult         time.Duration `json:"mult"`
+	Div          time.Duration `json:"div"`
+	AgentTimeout time.Duration `json:"timeout"`
 }
 
 // Структура агента
