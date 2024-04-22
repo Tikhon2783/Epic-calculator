@@ -73,10 +73,17 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 
 	var exists bool
 	id := r.URL.Query().Get("id")
-	username := r.URL.Query().Get("username")
+	// получаем значение из контекста запроса
+    username := r.Context().Value(myKey).(string)
+	var perms bool
+	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
 
 	logger.Println("Hello postgresql")
-	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1 AND username=$2)", id, username).Scan(&exists)
+	if !perms {
+		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1 AND username=$2)", id, username).Scan(&exists)
+	} else {
+		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1)", id).Scan(&exists)
+	}
 	logger.Println("Bye postgresql")
 	if err != nil {
 		logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
@@ -86,7 +93,7 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 	if !exists {
 		logger.Println("Выражение с полученным ID не найдено.")
-		fmt.Fprint(w, myErrors.FrontSrvErrors.InexistantIDError.Error())
+		http.Error(w, myErrors.FrontSrvErrors.InexistantIDError.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -126,82 +133,95 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Хендлер на endpoint получения списка выражений
-func GetExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения:", rec)
-			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
-		}
-		logger.Println("Сервер обработал запрос на получение списка выражений.")
-	}()
+// // Хендлер на endpoint получения списка выражений
+// func GetExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
+// 	defer func() {
+// 		if rec := recover(); rec != nil {
+// 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+// 			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения:", rec)
+// 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+// 		}
+// 		logger.Println("Сервер обработал запрос на получение списка выражений.")
+// 	}()
 
-	logger.Println("Сервер получил запрос на получение списка выражений.")
+// 	logger.Println("Сервер получил запрос на получение списка выражений.")
 
-	// Метод должен быть GET
-	if r.Method != http.MethodGet {
-		logger.Println("Неправильный метод, выражение не обрабатывается.")
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
+// 	// Метод должен быть GET
+// 	if r.Method != http.MethodGet {
+// 		logger.Println("Неправильный метод, выражение не обрабатывается.")
+// 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+// 		return
+// 	}
 
-	username := r.URL.Query().Get("username")
+// 	username := r.Header.Get("X-Username")
+// 	var perms bool
+// 	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
+// 	if err != nil {
+// 		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+// 			loggerErr.Println("Сервер: ошибка проверки пользователя в БД:", err)
+// 			http.Error(w, "Ошибка проверки пользователя", http.StatusInternalServerError)
+// 			return
+// 	}
 
-	rows, err := db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests WHERE username=$1", username)
-	if err != nil {
-		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-		loggerErr.Printf("Сервер: ошибка получения выражений из базы данных: %s", err)
-		http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
-		return
-	}
+// 	var rows *pgx.Rows
+// 	if !perms {
+// 		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests WHERE username=$1", username)
+// 	} else {
+// 		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests", username)
+// 	}
+// 	if err != nil {
+// 		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+// 		loggerErr.Printf("Сервер: ошибка получения выражений из базы данных: %s", err)
+// 		http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
+// 		return
+// 	}
 
-	var (
-		exps     [][]string = [][]string{{"ID", "выражение", "рез-т", "агент"}} // Слайс с выражениями (и заголовком)
-		id       int
-		exp      string
-		finished bool
-		res      string
-		errors   bool
-		agent    int
-		failed   int // Сколько строк не смогли получить (ошибка от постгреса)
-	)
-	defer rows.Close()
-	for rows.Next() {
-		err := rows.Scan(&id, &exp, &finished, &res, &errors, &agent)
-		if err != nil {
-			logger.Println("Не смогли получить ряд из таблицы с выражениями, записываем, продолжаем получать ряды")
-			loggerErr.Printf("Сервер: ошибка получения выражения из базы данных: %s", err)
-			failed++
-			continue
-		}
+// 	var (
+// 		exps     [][]string = [][]string{{"ID", "выражение", "рез-т", "агент"}} // Слайс с выражениями (и заголовком)
+// 		id       int
+// 		exp      string
+// 		finished bool
+// 		res      string
+// 		errors   bool
+// 		agent    int
+// 		failed   int // Сколько строк не смогли получить (ошибка от постгреса)
+// 	)
+// 	defer rows.Close()
+// 	for rows.Next() {
+// 		err := rows.Scan(&id, &exp, &finished, &res, &errors, &agent)
+// 		if err != nil {
+// 			logger.Println("Не смогли получить ряд из таблицы с выражениями, записываем, продолжаем получать ряды")
+// 			loggerErr.Printf("Сервер: ошибка получения выражения из базы данных: %s", err)
+// 			failed++
+// 			continue
+// 		}
 
-		if !finished {
-			if agent == -1 {
-				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", "в очереди"})
-			} else {
-				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", fmt.Sprintf("агент %v", agent)})
-			}
-		} else {
-			if errors {
-				exps = append(exps, []string{fmt.Sprint(id), exp, "ошибка", fmt.Sprintf("агент %v", agent)})
-			} else {
-				exps = append(exps, []string{fmt.Sprint(id), exp, res, fmt.Sprintf("агент %v", agent)})
-			}
-		}
-	}
-	utils.PrintTable(exps, w) // Выводим таблицу в консоль
-	if failed != 0 {
-		fmt.Fprintln(w, "Не удалось получить", failed, "строк.")
-	}
-	err = rows.Err()
-	if err != nil {
-		logger.Println("Ошибка со строками.")
-		loggerErr.Printf("Сервер: ошибка получения строк из базы данных (но таблицу вывели): %s", err)
-		// http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError
-		return
-	}
-}
+// 		if !finished {
+// 			if agent == -1 {
+// 				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", "в очереди"})
+// 			} else {
+// 				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", fmt.Sprintf("агент %v", agent)})
+// 			}
+// 		} else {
+// 			if errors {
+// 				exps = append(exps, []string{fmt.Sprint(id), exp, "ошибка", fmt.Sprintf("агент %v", agent)})
+// 			} else {
+// 				exps = append(exps, []string{fmt.Sprint(id), exp, res, fmt.Sprintf("агент %v", agent)})
+// 			}
+// 		}
+// 	}
+// 	utils.PrintTable(exps, w) // Выводим таблицу в консоль
+// 	if failed != 0 {
+// 		fmt.Fprintln(w, "Не удалось получить", failed, "строк.")
+// 	}
+// 	err = rows.Err()
+// 	if err != nil {
+// 		logger.Println("Ошибка со строками.")
+// 		loggerErr.Printf("Сервер: ошибка получения строк из базы данных (но таблицу вывели): %s", err)
+// 		// http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError
+// 		return
+// 	}
+// }
 
 // Хендлер на endpoint с значениями времени
 func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
@@ -215,9 +235,15 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 
 	logger.Println("Сервер получил запрос на получение/изменение значений времени.")
 	// Проверяем пользователя на наличие прав изменения таймаута
-	username := r.Header.Get("X-Username")
+	username := r.Context().Value(myKey).(string)
 	var perms bool
 	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: ошибка проверки пользователя в БД:", err)
+			http.Error(w, "Ошибка проверки пользователя", http.StatusInternalServerError)
+			return
+	}
 
 	// Если метод POST, обновляем значения
 	if r.Method == http.MethodPost {
@@ -225,7 +251,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
 		if err != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: ошибка парсинга запроса на изменение переменных.")
+			loggerErr.Println("Сервер: ошибка парсинга запроса на изменение переменных:", err)
 			http.Error(w, "Ошибка парсинга запроса", http.StatusInternalServerError)
 			return
 		}
@@ -234,6 +260,9 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 		tMult := r.PostForm.Get("mult")
 		tDiv := r.PostForm.Get("div")
 		tAgent := r.PostForm.Get("timeout")
+		if !perms {
+			tAgent = ""
+		}
 
 		// Выводим в консоль калькулятора полученные значения для упрощенного дебага
 		fmt.Print("'", strings.Join([]string{tSum, tSub, tMult, tDiv, tAgent}, "' '"), "'\n")
@@ -269,10 +298,11 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			u := strings.ReplaceAll(username, " ", "")
 			// Обновляем значение в БД
 			_, err = db.Exec(
-				`UPDATE time_vars
-					SET time = $2
+				fmt.Sprintf("UPDATE %s.time_vars (", u)+
+					`SET time = $2
 					WHERE action = $1`,
 				[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
 				t/1_000_000,
@@ -297,11 +327,10 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 	// Получаем значения и возвращаем
 	times := orchestrator.GetTimes()
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
 	if err := json.NewEncoder(w).Encode(times); err != nil {
 		http.Error(w, "Error encoding default data", http.StatusInternalServerError)
 	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // Хендлер на endpoint убийства агента
@@ -444,14 +473,15 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Printf("Записали пользователя %s в БД.", username)
 
+	u := strings.ReplaceAll(username, " ", "")
 	// Создаем схему для пользователя
-	_, err = db.Exec("CREATE SCHEMA $1;", username)
+	_, err = db.Exec(fmt.Sprintf("CREATE SCHEMA %s;", u))
 	if err != nil {
 		panic(err)
 	}
 	// Создаем таблицу в созданной схеме
 	_, err = db.Exec(
-		fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", username)+
+		fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", u)+
 		`action varchar (15) NOT NULL,
 		time integer NOT NULL
 		);`,
@@ -459,7 +489,7 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = db.Prepare("fill_times", "INSERT INTO time_vars (action, time) VALUES ($1, $2);")
+	_, err = db.Prepare("fill_times", fmt.Sprintf("INSERT INTO %s.time_vars (action, time) VALUES ($1, $2);", u))
 	if err != nil {
 		panic(err)
 	}

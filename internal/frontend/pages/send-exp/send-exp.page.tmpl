@@ -1,0 +1,64 @@
+{{template "base" .}}
+ 
+{{define "title"}}Authorization page{{end}}
+ 
+{{define "main"}}
+<h2>Выражения</h2>
+<form id="sendExpForm">
+    <label for="expression">Expression:</label>
+    <input type="text" id="expression" name="expression" placeholder="Введите выражение" required><br><br>
+    <button type="submit" id="sendExp-btn" onclick="submitSendForm(event)">Посчитать</button>
+</form>
+<form id="checkExpForm">
+    <label for="keyForm">Key:</label>
+    <input type="text" id="keyForm" name="keyForm" placeholder="Введите ключ (uuid)" required><br><br>
+    <button type="submit" id="checkExp-btn" onclick="submitCheckForm(event)">Найти</button>
+</form>
+<div id="resultBlock"></div>
+<div id="errBlock">{{ .Message }}</div>
+<table id="data-table">
+    <tr>
+        <th>Ключ uuid</th>
+        <th>Выражение</th>
+        <th>Результат</th>
+        <th>Агент</th>
+        <th>Пользователь</th>
+    </tr>
+    {{ range .Items }}
+    <tr>
+        <td>{{ .ID }}</td>
+        <td>{{ .Exp }}</td>
+        <td>{{ .Result }}</td>
+        <td>{{ .Agent }}</td>
+        <td>{{ .Username }}</td>
+    </tr>
+    {{ end }}
+</table>
+{{end}}
+
+{{define "custom"}}
+function submitCheckForm() {
+    const formData = new FormData(document.getElementById('keyForm'));
+    
+    fetch('/calculator/internal/checkexpression', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(data => {
+        // Display the response text in the result block
+        document.getElementById('resultBlock').innerText = data;
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function submitSendForm() {
+    const formData = new FormData(document.getElementById('keyForm'));
+    
+    fetch('/calculator/internal/sendexpression', {
+        method: 'POST',
+        body: formData
+    })
+    .catch(error => console.error('Error:', error));
+}
+{{end}}

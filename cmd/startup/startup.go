@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+	"strings"
 
 	"calculator/internal"
 	"calculator/internal/config"
@@ -61,21 +62,32 @@ func main() {
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt)
 	// go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
-	serverExitChannel := frontserver.LaunchServer()
+	serverExitChannel, orchestratorReviveChannel := frontserver.LaunchServer()
 
 	// Ждем сигнала об остановке программы
-	select {
-	case <-serverExitChannel: // Сигнал от сервера
-		logger.Println("HTTP сервер прислал сигнал об остановке, закрываем БД и завершаем работу...")
-		fmt.Println("Похоже, HTTP сервер калькулятора остановил свою работу.")
-		if err = frontserver.Srv.Close(); err != nil {
-			loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
-		}
-	case <-exitChannel: // Сигнал от пользователя
-		logger.Println("Пользователь прислал сигнал об остановке, закрываем БД и завершаем работу...")
-		fmt.Println("Поймал попытку завершить работу с ^C :)")
-		if err = frontserver.Srv.Close(); err != nil {
-			loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
+	Loop:
+	for {	
+		select {
+		case <-serverExitChannel: // Сигнал от сервера
+			logger.Println("HTTP сервер прислал сигнал об остановке, закрываем БД и завершаем работу...")
+			fmt.Println("Похоже, HTTP сервер калькулятора остановил свою работу.")
+			if err = frontserver.Srv.Close(); err != nil {
+				loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
+			}
+			break Loop
+		case <-exitChannel: // Сигнал от пользователя
+			logger.Println("Пользователь прислал сигнал об остановке, закрываем БД и завершаем работу...")
+			fmt.Println("Поймал попытку завершить работу с ^C :)")
+			if err = frontserver.Srv.Close(); err != nil {
+				loggerErr.Println("Не смогли закрыть HTTP сервер:", err)
+			}
+			break Loop
+		default:
+			select{
+			case <-orchestratorReviveChannel: // Сигнал о том, что нужно повторно запустить оркестратор
+				// TODO
+			default:
+			}
 		}
 	}
 
@@ -169,7 +181,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS requests (
 				request_id char(36) PRIMARY KEY,
-				username varchar(50) NOT NULL
+				username varchar(50) NOT NULL,
 				expression varchar(100) NOT NULL,
 				calculated boolean DEFAULT FALSE,
 				result varchar DEFAULT 0,
@@ -190,7 +202,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		go func() {
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS agent_proccesses (
-				request_id integer references requests(request_id),
+				request_id char(36) references requests(request_id),
 				proccess_id integer PRIMARY KEY,
 				expression varchar(1000) NOT NULL,
 				parts varchar(2000),
@@ -213,7 +225,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS users (
 				username varchar(50) PRIMARY KEY,
-				password_hash varchar(50) NOT NULL,
+				password_hash varchar(500) NOT NULL,
 				perms bool DEFAULT FALSE
 				);`,
 			)
@@ -250,13 +262,13 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				logger.Printf("Записали пользователя %s в БД.", u.Username)
 
 				// Создаем схему для пользователя
-				_, err = db.Exec("CREATE SCHEMA $1;", u.Username)
+				_, err = db.Exec(fmt.Sprintf("CREATE SCHEMA %s;", strings.ReplaceAll(u.Username, " ", "")))
 				if err != nil {
 					panic(err)
 				}
 				// Создаем таблицу в созданной схеме
 				_, err = db.Exec(
-					fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", u.Username)+
+					fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.time_vars (", strings.ReplaceAll(u.Username, " ", ""))+
 					`action varchar (15) NOT NULL,
 					time integer NOT NULL
 					);`,
@@ -264,12 +276,8 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				if err != nil {
 					panic(err)
 				}
-				_, err = db.Prepare("fill_times", "INSERT INTO time_vars (action, time) VALUES ($1, $2);")
-				if err != nil {
-					panic(err)
-				}
 				for i := 0; i < 4; i++ {
-					_, err = db.Exec("fill_times",
+					_, err = db.Exec(fmt.Sprintf("INSERT INTO %s.time_vars (action, time) VALUES ($1, $2);", strings.ReplaceAll(u.Username, " ", "")),
 						[]string{"summation", "substraction", "multiplication", "division"}[i],
 						fmt.Sprint(int([]time.Duration{
 							vars.T_sum,
@@ -301,9 +309,9 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 			if err != nil {
 				panic(err)
 			}
-			_, err = db.Exec("INSERT INTO agent_timeout VALUES")
+			_, err = db.Exec("INSERT INTO agent_timeout (time) VALUES ($1)", vars.T_agentTimeout/1_000_000)
 			db_info.T_agent = true
-			logger.Println("Создали таблицу с пользователями.")
+			logger.Println("Создали таблицу с таймаутом.")
 		}()
 	}
 
@@ -314,7 +322,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 	if err != nil {
 		panic(err)
 	}
-	f, err := os.Create("config/db_existance.json")
+	f, err := os.Create("internal/config/db_existance.json")
 	if err != nil {
 		panic(err)
 	}

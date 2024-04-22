@@ -1,7 +1,7 @@
 {
-	"Db": false,
-	"T_requests": false,
-	"T_agent": false,
+	"Db": true,
+	"T_requests": true,
+	"T_agent": true,
 	"T_vars": false,
 	"T_users": false,
 	"T_timeout": false

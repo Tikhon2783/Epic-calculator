@@ -14,6 +14,7 @@ import (
 
 var (
 	ServerExitChannel chan os.Signal = make(chan os.Signal, 1)
+	OrchestratorReviveChannel chan os.Signal = make(chan os.Signal, 1)
 	err               error
 	logger            *log.Logger = shared.Logger
 	loggerErr         *log.Logger = shared.LoggerErr
@@ -21,7 +22,7 @@ var (
 )
 
 // Горутина хоста HTTP сервера
-func LaunchServer() chan os.Signal {
+func LaunchServer() (chan os.Signal, chan os.Signal) {
 	logger.Println("Настраиваем HTTP сервер...")
 
 	// Настраиваем обработчики для разных путей
@@ -43,11 +44,11 @@ func LaunchServer() chan os.Signal {
 		"/calculator/internal/checkexpression",
 		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.CheckExpHandlerInternal)),
 	)
-	// Получить список всех выражений
-	mux.Handle(
-		"/calculator/internal/getexpressions",
-		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.GetExpHandlerInternal)),
-	)
+	// // Получить список всех выражений
+	// mux.Handle(
+	// 	"/calculator/internal/getexpressions",
+	// 	middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.GetExpHandlerInternal)),
+	// )
 	// Получение списка доступных операций со временем их выполения
 	mux.Handle(
 		"/calculator/internal/values",
@@ -64,8 +65,8 @@ func LaunchServer() chan os.Signal {
 
 	// Внешние endpoint-ы
 	mux.HandleFunc("/calculator/home", handlers.HomeHandler)
-	// Отправить выражение
-	mux.Handle("/calculator/send", middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.SendHandlerExternal)))
+	// // Отправить выражение
+	// mux.Handle("/calculator/send", middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.SendHandlerExternal)))
 	// Получить список всех выражений
 	mux.Handle(
 		"/calculator/check",
@@ -107,5 +108,5 @@ func LaunchServer() chan os.Signal {
 		ServerExitChannel <- os.Interrupt
 		logger.Println("Отправили сигнал прерывания.")
 	}()
-	return ServerExitChannel
+	return ServerExitChannel, OrchestratorReviveChannel
 }

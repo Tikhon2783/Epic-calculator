@@ -30,12 +30,21 @@ function submitForm(event) {
     }
     
     const form = document.getElementById('authForm');
-    const formData = new FormData(form);
-    
-    console.log("Pretending to send stuf...")
-    console.log(formData)
-    sessionStorage.setItem("loggedInUser", username)
-    console.log("stored:", sessionStorage.getItem('loggedInUser'))
+    fetch('http://your-server-url', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if(response.ok) {
+            console.log('Request successful');
+            alert('Успешно зарегстрировались и зашли в аккаунт =D');
+            sessionStorage.setItem("loggedInUser", username)
+        } else {
+            console.error('Request failed');
+            alert('Ошибка');
+        }
+    })
+    .catch(error => console.error('Error:', error));
     location.reload();
 }
 {{end}}

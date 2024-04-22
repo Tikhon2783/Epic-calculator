@@ -32,8 +32,8 @@ const (
   LoggerFlagsQueue int = log.Ltime                  // Флаги логгера обращений агентов к очереди выражений
 	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: internal/logs/debug.txt, 2: Stdout + debug.txt)
 	LoggerOutputError int = 2		// Вывод логгера ошибок (0: Stderr, 1: internal/logs/errors.txt, 2: Stderr + errors.txt)
-	LoggerOutputPings int = 1		// Вывод логгера ошибок (0: Stdout, 1: internal/logs/heartbeats.txt, 2: Stdout + heartbeats.txt)
-  LoggerOutputQueue int = 1		// Вывод логгера ошибок (0: Stdout, 1: internal/logs/queue.txt, 2: Stdout + queue.txt)
+	LoggerOutputPings int = 1		// Вывод логгера пингов (0: Stdout, 1: internal/logs/heartbeats.txt, 2: Stdout + heartbeats.txt)
+  LoggerOutputQueue int = 1		// Вывод логгера очереди (0: Stdout, 1: internal/logs/queue.txt, 2: Stdout + queue.txt)
 )
 
 // Переменные конфигурации агентов

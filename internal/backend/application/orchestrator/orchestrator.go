@@ -527,7 +527,7 @@ func TimeValues(w http.ResponseWriter, r *http.Request) {
 func GetTimes() *agent.Times {
 	rows, err := db.Query("SELECT action, time from time_vars;")
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	defer rows.Close()
 	t := &agent.Times{}
@@ -538,7 +538,7 @@ func GetTimes() *agent.Times {
 		)
 		err := rows.Scan(&t_type, &t_time)
 		if err != nil {
-			log.Fatal(err)
+			loggerErr.Panic(err)
 		}
 		switch t_type {
 		case "summation":
@@ -561,7 +561,7 @@ func GetTimes() *agent.Times {
 	}
 	err = rows.Err()
 	if err != nil {
-		log.Fatal(err)
+		loggerErr.Panic(err)
 	}
 	return t
 }
