@@ -12,16 +12,16 @@
     <label for="password">Password:</label>
     <input type="password" id="password" name="password" placeholder="Enter password" required><br><br>
     
-    <button type="submit" id="login" onclick="submitForm(event)">Log In</button>
-    <button type="submit" id="register" onclick="submitForm(event)">Register</button>
+    <button type="submit" id="login" onclick="submitLogForm(event)">Log In</button>
+    <button type="submit" id="register" onclick="submitRegForm(event)">Register</button>
 </form>
 {{end}}
 
 {{define "custom"}}
-function submitForm(event) {
+function submitRegForm(event) {
     event.preventDefault();
 
-    console.log('sending request...');
+    console.log('sending register request...');
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
@@ -32,7 +32,9 @@ function submitForm(event) {
     }
     
     const form = document.getElementById('authForm');
-    const formData = new FormData(form);
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
 
     fetch('/calculator/internal/register', {
         method: 'POST',
@@ -40,8 +42,58 @@ function submitForm(event) {
     })
     .then(response => {
         if(response.ok) {
+            fetch('/calculator/internal/signin', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if(response.ok) {
+                    console.log('Request successful');
+                    alert('Успешно зарегстрировались и зашли в аккаунт =D');
+                    sessionStorage.setItem("loggedInUser", username)
+                } else {
+                    console.error('Request failed');
+                    alert('Ошибка');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        } else {
+            if(response.status === 409) {
+                alert('Пользователь с таким именем уже существует')
+            } else {
+                alert('Ошибка, code', response.status)
+            }
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function submitLogForm(event) {
+    event.preventDefault();
+
+    console.log('sending sign in request...');
+    
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    
+    if (!username || !password) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    const form = document.getElementById('authForm');
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    fetch('/calculator/internal/signin', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if(response.ok) {
             console.log('Request successful');
-            alert('Успешно зарегстрировались и зашли в аккаунт =D');
+            alert('Успешно вошли в аккаунт =D');
             sessionStorage.setItem("loggedInUser", username)
         } else {
             console.error('Request failed');
@@ -49,6 +101,5 @@ function submitForm(event) {
         }
     })
     .catch(error => console.error('Error:', error));
-    location.reload();
 }
 {{end}}

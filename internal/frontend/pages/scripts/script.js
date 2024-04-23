@@ -1,5 +1,7 @@
-function submitForm(event) {
+function submitRegForm(event) {
     event.preventDefault();
+
+    console.log('sending register request...');
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
@@ -10,14 +12,27 @@ function submitForm(event) {
     }
     
     const form = document.getElementById('authForm');
-    const formData = new FormData(form);
-    
-    console.log("Pretending to send stuf...")
-    console.log(formData)
-    sessionStorage.setItem("loggedInUser", username)
-    console.log("stored:", sessionStorage.getItem('loggedInUser'))
-    location.reload();
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    fetch('/calculator/internal/register', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if(response.ok) {
+            console.log('Request successful');
+            alert('Успешно зарегстрировались и зашли в аккаунт =D');
+            sessionStorage.setItem("loggedInUser", username)
+        } else {
+            console.error('Request failed');
+            alert('Ошибка: code', response.status);
+        }
+    })
+    .catch(error => console.error('Error:', error));
 }
+
 
 document.addEventListener('DOMContentLoaded', function() {
     const loggedInUser = sessionStorage.getItem('loggedInUser');

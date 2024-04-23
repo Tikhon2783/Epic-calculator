@@ -1,8 +1,8 @@
 package jwtstuff
 
 import (
-	"time"
 	"net/http"
+	"time"
 
 	"calculator/internal/config"
 	"calculator/internal/errors"
@@ -16,16 +16,19 @@ type Claims struct {
 }
 
 func GenerateToken(username string) (*http.Cookie, error) {
-	expirationTime := time.Now().Add(vars.JWTValidyDuration)
+	now := time.Now()
+	expirationTime := now.Add(vars.JWTValidyDuration)
 	claims := Claims{
 		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt: &jwt.NumericDate{now},
+			NotBefore: &jwt.NumericDate{now},
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(vars.SecretJWTSignature)
+	tokenString, err := token.SignedString([]byte(vars.SecretJWTSignature))
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +37,9 @@ func GenerateToken(username string) (*http.Cookie, error) {
 		Name:    "token",
 		Value:   tokenString,
 		Expires: expirationTime,
-		HttpOnly: true,
+		// HttpOnly: true,
+		Path: "/",
+		SameSite: http.SameSiteNoneMode,
 	}, nil
 }
 

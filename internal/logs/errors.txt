@@ -25,3 +25,80 @@
 02:46:20 internal.go:503: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
 02:46:20 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
 02:46:35 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+06:49:11 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+
+НОВАЯ СЕССИЯ
+06:49:51 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+
+НОВАЯ СЕССИЯ
+06:52:19 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+
+НОВАЯ СЕССИЯ
+07:09:23 internal.go:503: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
+07:09:23 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
+07:09:41 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:19:46 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:24:59 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:25:54 internal.go:489: ОШИБКА: схема "jeremy" уже существует (SQLSTATE 42P06)
+07:25:54 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: схема "jeremy" уже существует (SQLSTATE 42P06)
+07:26:53 internal.go:489: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
+07:26:53 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
+07:28:21 internal.go:489: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
+07:28:21 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
+07:29:33 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:30:04 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:33:36 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:35:11 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:40:16 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:40:44 internal.go:588: Ошибка генерации токена: key is of invalid type: HMAC sign expects []byte
+07:41:23 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:51:54 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:53:13 internal.go:528: Сервер: непредвиденная ПАНИКА при обработки запроса на вход пользователя: runtime error: invalid memory address or nil pointer dereference
+07:54:24 internal.go:528: Сервер: непредвиденная ПАНИКА при обработки запроса на вход пользователя: runtime error: invalid memory address or nil pointer dereference
+07:55:11 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+07:58:17 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:06:16 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:13:29 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:17:43 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:24:40 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:31:46 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:32:35 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+08:39:13 server.go:104: HTTP сервер накрылся: http: Server closed

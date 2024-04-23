@@ -498,12 +498,8 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		loggerErr.Panic(err)
 	}
-	_, err = db.Prepare("fill_times", fmt.Sprintf("INSERT INTO %s.time_vars (action, time) VALUES ($1, $2);", u))
-	if err != nil {
-		loggerErr.Panic(err)
-	}
 	for i := 0; i < 4; i++ {
-		_, err = db.Exec("fill_times",
+		db.Exec(fmt.Sprintf("INSERT INTO %s.time_vars (action, time) VALUES ($1, $2);", u),
 			[]string{"summation", "substraction", "multiplication", "division"}[i],
 			fmt.Sprint(int([]time.Duration{
 				vars.T_sum,
@@ -521,8 +517,7 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Printf("Создали таблицу с переменными для пользователя '%s'.", username)
 	logger.Println("Пользователь зарегистрирован, производим процесс входа...")
-
-	http.Redirect(w, r, "../signin", http.StatusSeeOther)
+	w.WriteHeader(200)
 }
 
 // Хендлер на endpoint входа
@@ -535,10 +530,11 @@ func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	db = shared.Db
 	logger.Println("Сервер получил запрос на вход пользователя.")
 	// Метод должен быть POST
 	if r.Method != http.MethodPost {
-		logger.Println("Неправильный метод, запрос не обрабатывается.")
+		logger.Println("Неправильный метод, запрос не обрабатывается:", r.Method)
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
@@ -576,7 +572,7 @@ func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	err = db.QueryRow(
 		`SELECT password_hash FROM users WHERE username=$1`, username).Scan(&hash)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	// Проверяем пароль
 	err = utils.CompareHashAndPassword(hash, password)
@@ -594,8 +590,10 @@ func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error generating jwt token", http.StatusBadRequest)
 		return
 	}
+	logger.Println(cookie.Valid(), cookie.Value)
 	http.SetCookie(w, cookie)
 	logger.Println("Записали jwt токен в cookie.")
+	w.WriteHeader(200)
 }
 
 // Хендлер на endpoint выхода из аккаунта
