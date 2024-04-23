@@ -40,6 +40,12 @@ type myKeys interface{}
 
 var myKey myKeys = "myKey"
 
+func enableCors(w *http.ResponseWriter) {
+    (*w).Header().Set("Access-Control-Allow-Origin", "*")
+    (*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+    (*w).Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
 // Хендлер на endpoint принятия выражений
 func HandleExpressionInternal(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Обработчик выражений получил запрос...")
@@ -410,6 +416,8 @@ func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Хендлер регистрации
 func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	db = shared.Db
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
@@ -434,8 +442,9 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username := r.PostForm.Get("username")
-	password := r.PostForm.Get("password")
+	username := r.Form.Get("username")
+	password := r.Form.Get("password")
+	logger.Printf("username '%s', password '%s'", username, password)
 
 	// Проверяем, существует ли уже пользователь с таким именем
 	var exists bool
@@ -469,7 +478,7 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		hashedPswd,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	logger.Printf("Записали пользователя %s в БД.", username)
 
@@ -477,7 +486,7 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	// Создаем схему для пользователя
 	_, err = db.Exec(fmt.Sprintf("CREATE SCHEMA %s;", u))
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	// Создаем таблицу в созданной схеме
 	_, err = db.Exec(
@@ -487,11 +496,11 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		);`,
 	)
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	_, err = db.Prepare("fill_times", fmt.Sprintf("INSERT INTO %s.time_vars (action, time) VALUES ($1, $2);", u))
 	if err != nil {
-		panic(err)
+		loggerErr.Panic(err)
 	}
 	for i := 0; i < 4; i++ {
 		_, err = db.Exec("fill_times",

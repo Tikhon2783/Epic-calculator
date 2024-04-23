@@ -20,6 +20,8 @@
 {{define "custom"}}
 function submitForm(event) {
     event.preventDefault();
+
+    console.log('sending request...');
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
@@ -30,7 +32,9 @@ function submitForm(event) {
     }
     
     const form = document.getElementById('authForm');
-    fetch('http://your-server-url', {
+    const formData = new FormData(form);
+
+    fetch('/calculator/internal/register', {
         method: 'POST',
         body: formData
     })

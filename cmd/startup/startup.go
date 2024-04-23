@@ -232,7 +232,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 			if err != nil {
 				panic(err)
 			}
-			db_info.T_agent = true
+			db_info.T_users = true
 			logger.Println("Создали таблицу с пользователями.")
 			wg.Done()
 		}()
@@ -293,6 +293,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 							"division"}[i], "): ", err)
 					}
 				}
+				db_info.T_vars = true
 				logger.Printf("Создали таблицу с переменными для пользователя '%s'.", u.Username)
 				wg.Done()
 			}(u)
@@ -310,7 +311,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				panic(err)
 			}
 			_, err = db.Exec("INSERT INTO agent_timeout (time) VALUES ($1)", vars.T_agentTimeout/1_000_000)
-			db_info.T_agent = true
+			db_info.T_timeout = true
 			logger.Println("Создали таблицу с таймаутом.")
 		}()
 	}
