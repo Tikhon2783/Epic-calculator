@@ -180,7 +180,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		func() {
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS requests (
-				request_id char(36) PRIMARY KEY,
+				request_id char(32) PRIMARY KEY,
 				username varchar(50) NOT NULL,
 				expression varchar(100) NOT NULL,
 				calculated boolean DEFAULT FALSE,
@@ -202,7 +202,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		go func() {
 			_, err = db.Exec(
 				`CREATE TABLE IF NOT EXISTS agent_proccesses (
-				request_id char(36) references requests(request_id),
+				request_id char(32) references requests(request_id),
 				proccess_id integer PRIMARY KEY,
 				expression varchar(1000) NOT NULL,
 				parts varchar(2000),

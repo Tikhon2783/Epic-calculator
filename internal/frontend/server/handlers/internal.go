@@ -20,6 +20,10 @@ import (
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
+	pb "calculator/internal/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure" // для упрощения не будем использовать SSL/TLS аутентификация
+	"github.com/google/uuid"
 )
 
 var (
@@ -48,13 +52,75 @@ func enableCors(w *http.ResponseWriter) {
 
 // Хендлер на endpoint принятия выражений
 func HandleExpressionInternal(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: неожиданная ПАНИКА при отправке выражения:", rec)
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
 	logger.Println("Обработчик выражений получил запрос...")
 
 	vals := r.Context().Value(myKey).([2]myKeys)
-	id, exp := vals[0].(int), vals[1].(string)
-	_, _ = id, exp
+	username := vals[0].(string)
+	exp := vals[1].(string)
 
-	// TODO
+	// Генерируем uuid
+	uuidWithHyphen := uuid.New()
+    logger.Println("Сгенерированный uuid:", uuidWithHyphen)
+    uuid := strings.ReplaceAll(uuidWithHyphen.String(), "-", "")
+
+	// Отправляем запрос оркестратору
+	host := "localhost"
+	port := vars.PortGrpc
+	addr := fmt.Sprintf("%s:%s", host, port) // используем адрес сервера
+	// установим соединение
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: не получилось подключиться к серверу gRPC: ", err)
+		http.Error(w, "ошибка подключения к gRPC", http.StatusInternalServerError)
+		return
+	}
+
+	defer func() {
+		if err = conn.Close(); err != nil {
+			loggerErr.Println("Сервер: ошибка закрытия соединения:", err)
+		}
+	}()
+
+	grpcClient := pb.NewOrchestratorServiceClient(conn)
+	resp, err := grpcClient.SendExp(r.Context(), &pb.ExpSendRequest{
+		Username: username,
+		Id: uuid,
+		Expression: exp,
+	})
+
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: запрос оркестратору вернулся ошибкой: ", err)
+		http.Error(w, "ошибка запроса оркестратору", http.StatusInternalServerError)
+		return
+	}
+
+	// Проверяем на наличие ошибок
+	if len(resp.Error) != 0 {
+		logger.Println("Оркестратор вернул ошибки - проверьте лог ошибок.")
+		for i, myErr := range resp.Error {
+			loggerErr.Printf("Оркестратор вернул ошибку (%d/%d): %s", i, len(resp.Error), myErr)
+		}
+		loggerErr.Println("...")
+	}
+
+	switch resp.Agent {
+	case 0:
+		fmt.Fprintln(w, "Ошибка отправки запроса")
+	case -1:
+		fmt.Fprintln(w, "Выражение успешно принятно оркестратором и поставлено в очередь.")
+	default:
+		fmt.Fprintf(w, "Выражение успешно принятно оркестратором и переданно агенту %d.", resp.Agent)
+	}
+	logger.Printf("Запрос на подсчет выражения обработан (resp.Agent = %d).", resp.Agent)
 }
 
 // Хендлер на endpoint получения результата выражения по ключу
@@ -344,12 +410,12 @@ func KillAgentHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-			loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработки запроса на убийство агента:", rec)
+			loggerErr.Println("Сервер: неожиданная ПАНИКА при обработки запроса на убийство агента:", rec)
 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 		}
 	}()
 
-	logger.Println("Сервер получил запрос на убийство агента.")
+	logger.Println("Сервер получил запрос на действие с агентом.")
 
 	// Метод должен быть GET
 	if r.Method != http.MethodGet {
@@ -363,26 +429,159 @@ func KillAgentHandlerInternal(w http.ResponseWriter, r *http.Request) {
 
 	// Пользователь хочет сократить агентов
 	if act == "kill" {
-		// TODO
+		// Отправляем запрос оркестратору
+		host := "localhost"
+		port := vars.PortGrpc
+		addr := fmt.Sprintf("%s:%s", host, port) // используем адрес сервера
+		// установим соединение
+		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: не получилось подключиться к серверу gRPC: ", err)
+			http.Error(w, "ошибка подключения к gRPC", http.StatusInternalServerError)
+			return
+		}
+		defer func() {
+			if err = conn.Close(); err != nil {
+				loggerErr.Println("Сервер: ошибка закрытия соединения:", err)
+			}
+		}()
+
+		grpcClient := pb.NewOrchestratorServiceClient(conn)
+		resp, err := grpcClient.KillAgent(r.Context(), &pb.EmptyMessage{})
+
+		if err != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: запрос оркестратору вернулся ошибкой: ", err)
+			http.Error(w, "ошибка запроса оркестратору", http.StatusInternalServerError)
+			return
+		}
+
+		// Проверяем на наличие ошибок
+		if len(resp.Error) != 0 {
+			logger.Println("Оркестратор вернул ошибки - проверьте лог ошибок.")
+			for i, myErr := range resp.Error {
+				loggerErr.Printf("Оркестратор вернул ошибку (%d/%d): %s", i, len(resp.Error), myErr)
+			}
+			loggerErr.Println("...")
+		}
+
+		switch resp.Agent {
+		case 0:
+			fmt.Fprintln(w, "Ошибка отправки запроса")
+		case -1:
+			fmt.Fprintln(w, "Не осталось живых агентов.")
+		default:
+			fmt.Fprintf(w, "Агент %d отключен.", resp.Agent)
+		}
+		logger.Printf("Запрос на отключение агента обработан (resp.Agent = %d).", resp.Agent)
 	// Пользователь хочет добавить агентов
 	} else if act == "revive" {
-		// TODO
+		// Отправляем запрос оркестратору
+		host := "localhost"
+		port := vars.PortGrpc
+		addr := fmt.Sprintf("%s:%s", host, port) // используем адрес сервера
+		// установим соединение
+		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: не получилось подключиться к серверу gRPC: ", err)
+			http.Error(w, "ошибка подключения к gRPC", http.StatusInternalServerError)
+			return
+		}
+		defer func() {
+			if err = conn.Close(); err != nil {
+				loggerErr.Println("Сервер: ошибка закрытия соединения:", err)
+			}
+		}()
+
+		grpcClient := pb.NewOrchestratorServiceClient(conn)
+		resp, err := grpcClient.ReviveAgent(r.Context(), &pb.EmptyMessage{})
+
+		if err != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: запрос оркестратору вернулся ошибкой: ", err)
+			http.Error(w, "ошибка запроса оркестратору", http.StatusInternalServerError)
+			return
+		}
+
+		// Проверяем на наличие ошибок
+		if len(resp.Error) != 0 {
+			logger.Println("Оркестратор вернул ошибки - проверьте лог ошибок.")
+			for i, myErr := range resp.Error {
+				loggerErr.Printf("Оркестратор вернул ошибку (%d/%d): %s", i, len(resp.Error), myErr)
+			}
+			loggerErr.Println("...")
+		}
+
+		switch resp.Agent {
+		case 0:
+			fmt.Fprintln(w, "Ошибка отправки запроса")
+		case -1:
+			fmt.Fprintln(w, "Не осталось мертвых агентов.")
+		default:
+			fmt.Fprintf(w, "Агент %d подключен.", resp.Agent)
+		}
+		logger.Printf("Запрос на подключение агента обработан (resp.Agent = %d).", resp.Agent)
 	} else {
 		logger.Println("Неправильный аргумент, выражение не обрабатывается.")
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
 	}
 }
 
 // Хендлер на endpoint убийства оркестратора
 func KillOrchestratorHandlerInternal(w http.ResponseWriter, r *http.Request) {
-	// TODO
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: неожиданная ПАНИКА при запросе на убийство оркестратора:", rec)
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
+	logger.Println("Обработчик оркестратора получил запрос...")
+
+	// Отправляем запрос оркестратору
+	host := "localhost"
+	port := vars.PortGrpc
+	addr := fmt.Sprintf("%s:%s", host, port) // используем адрес сервера
+	// установим соединение
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: не получилось подключиться к серверу gRPC: ", err)
+		http.Error(w, "ошибка подключения к gRPC", http.StatusInternalServerError)
+		return
+	}
+
+	defer func() {
+		if err = conn.Close(); err != nil {
+			loggerErr.Println("Сервер: ошибка закрытия соединения:", err)
+		}
+	}()
+
+	grpcClient := pb.NewOrchestratorServiceClient(conn)
+	resp, err := grpcClient.KillOrch(r.Context(), &pb.EmptyMessage{})
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: запрос оркестратору вернулся ошибкой:", err)
+		http.Error(w, "ошибка запроса оркестратору", http.StatusInternalServerError)
+		return
+	}
+	if resp.Error != "" {
+		logger.Println("Оркестратор вернул ошибку.")
+		loggerErr.Println("Сервер: оркестратору вернул ошибку:", err)
+		http.Error(w, "ошибка запроса оркестратору", http.StatusInternalServerError)
+		return
+	}
+
+	logger.Println("Оркестратор должен быть отключен, возвращаем код 200.")
+	w.WriteHeader(200)
 }
 
-// Хендлер на endpoint мониторинга агентов
-func MonitorHandlerInternal(w http.ResponseWriter, r *http.Request) {
-	// TODO
-}
+// // Хендлер на endpoint мониторинга агентов
+// func MonitorHandlerInternal(w http.ResponseWriter, r *http.Request) {
+// 	// TODO
+// }
 
 // Хендлер на endpoint убийства сервера
 func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {

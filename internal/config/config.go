@@ -56,6 +56,16 @@ const (
   JWTValidyDuration time.Duration = 5 * time.Minute // Время действия токена
 )
 
+// HTTP
+const (
+  PortHttp string = ":8080"
+)
+
+// gRPC
+const (
+  PortGrpc string = "5000"
+)
+
 /*
                                                          ....                             
                                           :.::::-----=*%@@@@@#                            

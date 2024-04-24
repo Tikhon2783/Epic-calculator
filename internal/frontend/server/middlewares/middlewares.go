@@ -2,7 +2,6 @@ package middlewares
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -61,32 +60,6 @@ func ValidityMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		idStr := r.PostForm.Get("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			logger.Println("Ошибка, выражение не обрабатывается.")
-			loggerErr.Println("Сервер: ошибка преобразования ключа идемпотентности в тип int.")
-			http.Error(w, "Ошибка преобразования ключа идемпотентности в тип int", http.StatusInternalServerError)
-			return
-		}
-
-		// Проверяем, принято ли уже было выражение с таким же ключом идемпотентности
-		var exists bool
-		logger.Println("Hello postgresql")
-		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE request_id=$1)", id).Scan(&exists)
-		if err != nil {
-			logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-			loggerErr.Println("Сервер: ошибка проверки ключа в базе данных.")
-			http.Error(w, "Ошибка проверки ключа в базе данных", http.StatusInternalServerError)
-			return
-		}
-		logger.Println("Bye postgresql")
-		if exists {
-			logger.Println("Выражение с повторяющимся ключем идемпотентности, возвращаем код 200.")
-			fmt.Fprint(w, http.StatusText(200), "Выражение уже было принято к обработке")
-			return
-		}
-
 		// Проверяем выражение на валидность
 		exp := r.PostForm.Get("expression")
 		exp = strings.ReplaceAll(exp, " ", "") // Убираем пробелы
@@ -121,7 +94,8 @@ func ValidityMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Передаем обработчику ID и выражение через контекст
-		ctx := context.WithValue(r.Context(), myKey, [2]myKeys{id, exp})
+		username := r.Context().Value(myKey).(string)
+		ctx := context.WithValue(r.Context(), myKey, [2]myKeys{username, exp})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -161,7 +135,7 @@ func ExternalAuthorizationMiddleware(next http.Handler) http.Handler {
 				// Токен неверный, перенаправляем пользователя на страницу входа
 				logger.Println("Сервер: неверный токен, перенаправляем на страницу входа.")
 				http.Redirect(w, r, "/calculator/auth", http.StatusUnauthorized)
-			} else if err == myErrors.JWTErrors.UnknownErr {
+			} else {
 				logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
 				loggerErr.Println("Ошибка проверки jwt токена:", err)
 				http.Error(w, "ошибка проверки jwt токена", http.StatusBadRequest)

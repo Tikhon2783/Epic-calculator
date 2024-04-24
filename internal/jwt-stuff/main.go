@@ -47,13 +47,13 @@ func CheckToken(tokenString string) (string, error) {
 	claims := &Claims{}
 
 	tkn, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-		return vars.SecretJWTSignature, nil
+		return []byte(vars.SecretJWTSignature), nil
 	})
 	if err != nil {
 		if err == jwt.ErrSignatureInvalid {
 			return "", myErrors.JWTErrors.InvalidTokenErr
 		}
-		return "", myErrors.JWTErrors.UnknownErr
+		return "", err
 	}
 	if !tkn.Valid {
 		return "", myErrors.JWTErrors.InvalidTokenErr

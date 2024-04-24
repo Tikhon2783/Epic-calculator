@@ -37,27 +37,55 @@
 {{end}}
 
 {{define "custom"}}
-function submitCheckForm() {
-    const formData = new FormData(document.getElementById('keyForm'));
+function submitCheckForm(event) {
+    event.preventDefault();
+
+    console.log('sending check request...');
+
+    const key = document.getElementById('keyForm').value;
+    if (!key) {
+        alert('Заполните поле с ключем');
+        return;
+    }
     
-    fetch('/calculator/internal/checkexpression', {
-        method: 'POST',
-        body: formData
-    })
+    const url = `/calculator/internal/checkexpression?id=${key}`;
+
+    fetch(url)
     .then(response => response.text())
     .then(data => {
-        // Display the response text in the result block
         document.getElementById('resultBlock').innerText = data;
     })
     .catch(error => console.error('Error:', error));
 }
 
-function submitSendForm() {
-    const formData = new FormData(document.getElementById('keyForm'));
-    
+function submitSendForm(event) {
+    event.preventDefault();
+
+    console.log('sending calc request...');
+
+    const key = document.getElementById('expression').value;
+    if (!key) {
+        alert('Заполните поле с выражением');
+        return;
+    }
+    const formData = new URLSearchParams();
+    formData.append('id', key);
+
     fetch('/calculator/internal/sendexpression', {
         method: 'POST',
         body: formData
+    })
+    .then(response => {
+        if(response.ok) {
+            console.log('Request successful');
+            alert('Выражение отправлено');
+        } else {
+            console.error('Request failed');
+            alert('Ошибка, code', response.status)
+        }
+    })
+    .then(data => {
+        alert(data);
     })
     .catch(error => console.error('Error:', error));
 }

@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
-	"html/template"
 
 	// "calculator/internal"
+	shared "calculator/internal"
 	"calculator/internal/jwt-stuff"
 	// "calculator/internal/errors"
 
@@ -81,6 +82,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 	}()
 	logger.Println("Получили внешний запрос на страницу с выражениями")
 
+	db = shared.Db
 	// Получаем имя пользователя через jwt токен из cookie файлов
 	cookie, err := r.Cookie("token")
 	if err != nil {
@@ -116,7 +118,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 	if !perms {
 		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests WHERE username=$1", username)
 	} else {
-		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests", username)
+		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests")
 	}
 	if err != nil {
 		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")

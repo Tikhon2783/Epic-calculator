@@ -71,3 +71,53 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+function submitCheckForm(event) {
+    event.preventDefault();
+
+    console.log('sending check request...');
+
+    const key = document.getElementById('keyForm').value;
+    if (!key) {
+        alert('Заполните поле с ключем');
+        return;
+    }
+    
+    const url = `/calculator/internal/checkexpression?id=${key}`;
+
+    fetch(url)
+    .then(response => response.text())
+    .then(data => {
+        document.getElementById('resultBlock').innerText = data;
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function submitSendForm(event) {
+    event.preventDefault();
+
+    console.log('sending calc request...');
+
+    const key = document.getElementById('expression').value;
+    if (!key) {
+        alert('Заполните поле с выражением');
+        return;
+    }
+    const formData = new URLSearchParams();
+    formData.append('id', key);
+
+    fetch('/calculator/internal/sendexpression', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if(response.ok) {
+            console.log('Request successful');
+            alert('Выражение отправлено');
+        } else {
+            console.error('Request failed');
+            alert('Ошибка, code', response.status)
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}

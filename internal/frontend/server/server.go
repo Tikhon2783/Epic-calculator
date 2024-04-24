@@ -1,15 +1,15 @@
 package frontserver
 
 import (
+	"fmt"
 	"log"
 	"net/http"
-	"fmt"
 	"os"
 
 	"calculator/internal"
+	"calculator/internal/config"
 	"calculator/internal/frontend/server/handlers"
 	"calculator/internal/frontend/server/middlewares"
-
 )
 
 var (
@@ -54,11 +54,11 @@ func LaunchServer() (chan os.Signal, chan os.Signal) {
 		"/calculator/internal/values",
 		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.TimeValuesInternal)),
 	)
-	// Получение списка агентов и оркестратора
-	mux.Handle(
-		"/calculator/internal/monitor",
-		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.MonitorHandlerInternal)),
-	)
+	// // Получение списка агентов и оркестратора
+	// mux.Handle(
+	// 	"/calculator/internal/monitor",
+	// 	middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.MonitorHandlerInternal)),
+	// )
 	mux.HandleFunc("/calculator/internal/signin", handlers.LogInHandlerInternal)		// Аутентификация пользователя
 	mux.HandleFunc("/calculator/internal/register", handlers.RegisterHandlerInternal)	// Регистрация пользователя
 	mux.HandleFunc("/calculator/internal/logout", handlers.LogOutHandlerInternal)		// Выход из аккаунта
@@ -91,7 +91,7 @@ func LaunchServer() (chan os.Signal, chan os.Signal) {
 
 	// Сам http сервер оркестратор
 	Srv = &http.Server{
-		Addr:     ":8080",
+		Addr:     vars.PortHttp,
 		Handler:  mux,
 		ErrorLog: loggerErr,
 	}
