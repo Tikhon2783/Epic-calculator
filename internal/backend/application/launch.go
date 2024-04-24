@@ -39,7 +39,7 @@ func Launch() {
 	orchestrator.CheckWorkLeft(manager)
 
 	// Запускаем сервер
-	go orchestrator.Launch()
+	go orchestrator.Launch(manager)
 }
 
 func launchAgent() {

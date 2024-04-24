@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,9 +12,13 @@ import (
 
 	"calculator/internal"
 
+	pb "calculator/internal/proto"
+
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure" // для упрощения не будем использовать SSL/TLS аутентификация
 )
 
 var (
@@ -50,8 +55,6 @@ func Agent(a *AgentComm) {
 			loggerErr.Printf("Перехватили панику агента %v: %s\n— Отключаем агента %v...\n", a.N, rec, a.N)
 		}
 		pulse.Stop()
-		// close(a.Heartbeat)
-		// close(a.ResInformer)
 		logger.Printf("Агент %v отключился.\n", a.N)
 	}()
 
@@ -59,83 +62,54 @@ func Agent(a *AgentComm) {
 	fmt.Printf("Агент %v передает привет!\n", a.N) // TODO: добавить имена
 	db = shared.Db
 	wg := sync.WaitGroup{}
+	
+	// Устанавливаем gRPC соединение
+	addrGrpc := fmt.Sprintf("%s:%s", a.Host, a.Port) // используем адрес сервера
+	// установим соединение
+	conn, err := grpc.Dial(addrGrpc, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		loggerErr.Println("Агент не смог подключиться к gRPC серверу оркестратора: ", err)
+		return
+	}
+	// закроем соединение, когда выйдем из функции
+	defer conn.Close()
+	grpcClient := pb.NewOrchestratorServiceClient(conn)
 
 	// Готовим пинги
 	pulse = time.NewTicker(min(a.Timeout / 5, time.Second))
+	deathChannel := make(chan struct{}, 1)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				loggerHB.Printf("Агент %v: Канал хартбитов закрыт, выходим из подгорутины хартбитов:\n", a.N)
+				loggerHB.Printf("Агент %v: паника горутины хартбитов, отключаем агента.\n", a.N)
 			}
+			deathChannel <- struct{}{}
 			logger.Printf("Агент %v – ВЫХОД\n", a.N)
 		}()
 
 		loggerHB.Printf("Агент %v - ЗАПУСК\n", a.N)
 		for {
 			select {
-			case <-a.Ctx.Done(): // Проверка на смерть агента
-				loggerHB.Printf("Агент %v - смерть.\n", a.N)
-				// wg.Done()
-				return
 			case <-pulse.C: // Пора посылать хартбит
-				select {
-				case <-a.Ctx.Done(): // Проверка на смерть агента
-					loggerHB.Printf("Агент %v - смерть.\n", a.N)
-					// wg.Done()
-					return
-				default:
-					loggerHB.Printf("Агент %v - отправляем...\n", a.N)
-					a.Heartbeat <- struct{}{}
-					loggerHB.Printf("Агент %v - отправили.\n", a.N)
+				loggerHB.Printf("Агент %v - отправляем...\n", a.N)
+				resp, err := grpcClient.SendHeartbeat(context.TODO(), &pb.HeartbeatRequest{AgentID: int32(a.N)})
+				loggerHB.Printf("Агент %v - отправили.\n", a.N)
+				if err != nil {
+					loggerErr.Panic("Ошибка отправки хартбита:", err)
 				}
+				if resp.Error == "dead" {
+					loggerHB.Printf("Агент %v - смерть.\n", a.N)
+					logger.Printf("Агент %v: запланированная смерть, отключаем агента...", a.N)
+					return
+				} else {
+					loggerErr.Println("???\t", resp.Error)
+				}
+			case <-deathChannel:
+				loggerHB.Printf("Агент %v - смерть.\n", a.N)
+				return
 			}
 		}
 	}()
-
-	// Подготавливаем sql команды
-	_, err = db.Prepare( // Получение выражения из таблицы с выражениями
-		"dbGet",
-		`SELECT expression FROM requests
-			WHERE request_id = $1;`,
-	)
-	if err != nil {
-		panic(err)
-	}
-	_, err = db.Prepare( // Запись выражения в таблицу с процессами (агентами)
-		"dbPut",
-		`INSERT INTO agent_proccesses (request_id, proccess_id, expression, parts)
-			VALUES ($1, $2, $3, $4);`,
-	)
-	if err != nil {
-		panic(err)
-	}
-	// _, err = db.Prepare( // Запись обработанного выражения в БД
-	// 	"dbParts",
-	// 	`UPDATE agent_proccesses
-	// 		SET parts = $2
-	// 		WHERE proccess_id = $1;`,
-	// )
-	// if err != nil {
-	// 	panic(err)
-	// }
-	_, err = db.Prepare( // Запись промежуточных результатов
-		"dbUpdate",
-		`UPDATE agent_proccesses
-			SET parts_results = $2
-			WHERE proccess_id = $1;`,
-	)
-	if err != nil {
-		panic(err)
-	}
-	_, err = db.Prepare( // Запись результата
-		"dbRes",
-		`UPDATE agent_proccesses
-			SET result = $2
-			WHERE proccess_id = $1;`,
-	)
-	if err != nil {
-		panic(err)
-	}
 
 	go func() {
 		defer func() {
@@ -143,8 +117,6 @@ func Agent(a *AgentComm) {
 				loggerErr.Printf("Перехватили панику агента %v: %s\n— Отключаем агента %v...", a.N, rec, a.N)
 			}
 			pulse.Stop()
-			close(a.Heartbeat)
-			close(a.ResInformer)
 			logger.Printf("Агент %v отключается...\n", a.N)
 			wg.Done()
 		}()
@@ -166,136 +138,137 @@ func Agent(a *AgentComm) {
 				newParts      [][]string // Слайс со всем
 				stoppedAt     int = 1 // Индекс последней части, принятой вычеслителем
 				activeWorkers int     // Кол-во занятых вычислителей
-				taskId        int	  // ID выражения
+				taskId        string  // ID выражения
 				task          string  // Само выражение
+				times *Times		  // Время на выполнение операций
 			)
 
 			// Фаза 1: агент свободен
 			logger.Printf("Агент %v ждет задачи...\n", a.N)
 			select {
-			case <-a.Ctx.Done(): // Смерть агента
+			case <-deathChannel: // Смерть агента
 				logger.Printf("Агент %v умирает...\n", a.N)
-				// wg.Done()
 				return
-			case taskId = <-a.TaskInformer: // Получили ID выражения
-				logger.Printf("Агент %v получил ID выражения: %v\n", a.N, taskId)
-				var exists bool
-				_, err = db.Exec("DELETE FROM agent_proccesses WHERE proccess_id = $1", a.N)
-				if err != nil {
-					panic(err)
-				}
-				err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM agent_proccesses WHERE request_id = $1);", taskId).Scan(&exists)
-				if err != nil {
-					panic(err)
-				}
-				if !exists {
-					logger.Printf("Агент %v обрабатывает выражение с ID %v впервые.", a.N, taskId)
-					newParts, err = proccessExp(newParts, taskId, a.N ,task)
+			default: // Посылаем оркестратору запросы, чтобы получить выражение раз в секунду
+				for {
+					resp, err := grpcClient.SeekForExp(context.TODO(), &pb.ExpSeekRequest{AgentID: int32(a.N)})
 					if err != nil {
-						panic(err)
+						loggerErr.Panic("Ошибка отправки запроса на получение выражения:", err)
 					}
-				} else {
-					logger.Printf("Агент %v обрабатывает выражение с ID %v невпервые.", a.N, taskId)
-					_, err = db.Exec(
-						`UPDATE agent_proccesses
-							SET proccess_id = $2
-							WHERE request_id = $1;`,
-						taskId,
-						a.N,
-					)
-					var partsString string
-					err = db.QueryRow(
-						`SELECT expression, parts FROM agent_proccesses
-							WHERE proccess_id = $1;`,
-							a.N,
-					).Scan(&partsString)
-					for _, elem := range strings.Split(partsString, " ' ") {
-						newParts = append(newParts, strings.Split(elem, " | "))
-					}
-					logger.Printf("Агент %v получил части выражения с ID %v: %s.", a.N, taskId, newParts)
-				}
+					if resp.Found {
+						times.Sum = time.Duration(resp.Times.Summation)
+						times.Sub = time.Duration(resp.Times.Substraction)
+						times.Mult = time.Duration(resp.Times.Multiplication)
+						times.Div = time.Duration(resp.Times.Division)
+						taskId = resp.ExpressionID
+						task = resp.Expression
+						
+						respNew, err := grpcClient.ConfirmTakeExp(context.TODO(), &pb.ExpConfirmRequest{
+							AgentID: int32(a.N),
+							ExpressionID: taskId,
+						})
+						if err != nil {
+							loggerErr.Panic("Ошибка отправки запроса на получение выражения:", err)
+						}
+						if respNew.Error == "not in queue" { // Выражение уже взял другой агент
+							continue
+						}
 
-				// Обрабатываем слагаемые:
-				logger.Printf("Агент %v начинает обработку слагаемых\n", a.N)
-				for i := 0; i < len(newParts); i++ {
-					logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
-					if activeWorkers == a.N_machines {
-						logger.Printf("Агент %v задействовал всех доступных вычислителей: %v (уровень слагаемых).\n", a.N, activeWorkers)
 						break
 					}
-					stoppedAt++
-					elem := newParts[i]
-					if len(elem) == 1 { // Слагаемое - единственное число, записываем его в слайс со слагаемыми
-						logger.Printf("Агент %v добавляет слагаемое '%s'.\n", a.N, elem[0])
-						comps = append(comps, elem[0])
-						if len(comps)%2 == 1 && len(comps) != 1 {
-							comps = append(comps, "0")
-						}
-					} else { // Внутри слагаемого нужно производить вычисления
-						logger.Printf("Агент %v обрабатывает множители %v слагаемого...\n", a.N, i)
-						for j := 1; j < len(elem); j += 2 { // Проходимся по множителям
-							v1, v2 := elem[j-1], elem[j]
-							logger.Printf("Агент %v: '%s', '%s'\n", a.N, v1, v2)
-							pos := [3]int{i, j - 1, j} // Координаты двух чисел
-							newParts[i][j-1] = "X"
-							newParts[i][j] = "X"
-							// Получаем значение для мапы статусов и запускаем вычислитель
-							val, err := calcMult(v1, v2, pos, chRes, timesNow)
-							if err != nil {
-								panic(err)
-							}
-							logger.Printf("Агент %v запустил вычислитель умножения(деления) (%s * %s).\n", a.N, v1, v2)
-							expParts[pos] = val
-							activeWorkers++
-							// Если задействовали всех доступных вычислителей, больше внутрь слагаемых заходить нет смысла
-							if activeWorkers == a.N_machines {
-								logger.Printf("Агент %v задействовал всех доступных вычислителей: %v (уровень множителей).\n", a.N, activeWorkers)
-								break
-							}
-						}
-						logger.Printf("Агент %v обработал слагаемое '%s'.\n", a.N, strings.Join(elem, "*"))
-					}
+					time.Sleep(1 * time.Second)
 				}
+			}
+			logger.Printf("Агент %v получил ID выражения: %v\n", a.N, taskId)
+			
+			newParts, err = proccessExp(newParts, taskId, a.N ,task)
+			if err != nil {
+				panic(err)
+			}
 
-				// Если не осталось свободных вычислителей, агент переходит в фазу работающего,
-				// то есть ждет значения от вычислителей
+			// Обрабатываем слагаемые:
+			logger.Printf("Агент %v начинает обработку слагаемых\n", a.N)
+			for i := 0; i < len(newParts); i++ {
+				logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
 				if activeWorkers == a.N_machines {
-					logger.Printf("Агент %v задействовал всех доступных вычислителей: %v.\n", a.N, activeWorkers)
+					logger.Printf("Агент %v задействовал всех доступных вычислителей: %v (уровень слагаемых).\n", a.N, activeWorkers)
 					break
 				}
+				stoppedAt++
+				elem := newParts[i]
+				if len(elem) == 1 { // Слагаемое - единственное число, записываем его в слайс со слагаемыми
+					logger.Printf("Агент %v добавляет слагаемое '%s'.\n", a.N, elem[0])
+					comps = append(comps, elem[0])
+					if len(comps)%2 == 1 && len(comps) != 1 {
+						comps = append(comps, "0")
+					}
+				} else { // Внутри слагаемого нужно производить вычисления
+					logger.Printf("Агент %v обрабатывает множители %v слагаемого...\n", a.N, i)
+					for j := 1; j < len(elem); j += 2 { // Проходимся по множителям
+						v1, v2 := elem[j-1], elem[j]
+						logger.Printf("Агент %v: '%s', '%s'\n", a.N, v1, v2)
+						pos := [3]int{i, j - 1, j} // Координаты двух чисел
+						newParts[i][j-1] = "X"
+						newParts[i][j] = "X"
+						// Получаем значение для мапы статусов и запускаем вычислитель
+						val, err := calcMult(v1, v2, pos, chRes, timesNow)
+						if err != nil {
+							panic(err)
+						}
+						logger.Printf("Агент %v запустил вычислитель умножения(деления) (%s * %s).\n", a.N, v1, v2)
+						expParts[pos] = val
+						activeWorkers++
+						// Если задействовали всех доступных вычислителей, больше внутрь слагаемых заходить нет смысла
+						if activeWorkers == a.N_machines {
+							logger.Printf("Агент %v задействовал всех доступных вычислителей: %v (уровень множителей).\n", a.N, activeWorkers)
+							break
+						}
+					}
+					logger.Printf("Агент %v обработал слагаемое '%s'.\n", a.N, strings.Join(elem, "*"))
+				}
+			}
 
-				// Иначе проходимся по однозначным слагаемым и складываем их
-				logger.Printf("Агент %v начинает производить сложение слагаемых.\n", a.N)
-				logger.Println("Слайс слагаемых:", fmt.Sprint("[", strings.Join(comps, "'"), "]"))
-				for i := 1; i < len(comps); i += 2 {
-					logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
-					v1, v2 := comps[i-1], comps[i]
-					logger.Printf("Агент %v: '%s', '%s'\n", a.N, v1, v2)
-					pos := [3]int{-1, i - 1, i} // Координаты двух чисел
-					comps[i-1] = "X"
-					comps[i] = "X"
-					// Запускаем вычислитель
-					err := calcSum(v1, v2, pos, chRes, timesNow)
-					if err != nil {
-						panic(err)
-					}
-					logger.Printf("Агент %v запустил вычислитель сложения(вычитания) (%s + %s).\n", a.N, v1, v2)
-					expParts[pos] = "sum"
-					activeWorkers++
-					if activeWorkers == a.N_machines {
-						logger.Printf("Агент %v задействовал всех доступных вычислителей: %v (уровень обработки слагаемых).\n", a.N, activeWorkers)
-						break
-					}
+			// Если не осталось свободных вычислителей, агент переходит в фазу работающего,
+			// то есть ждет значения от вычислителей
+			if activeWorkers == a.N_machines {
+				logger.Printf("Агент %v задействовал всех доступных вычислителей: %v.\n", a.N, activeWorkers)
+				break
+			}
+
+			// Иначе проходимся по однозначным слагаемым и складываем их
+			logger.Printf("Агент %v начинает производить сложение слагаемых.\n", a.N)
+			logger.Println("Слайс слагаемых:", fmt.Sprint("[", strings.Join(comps, "'"), "]"))
+			for i := 1; i < len(comps); i += 2 {
+				logger.Printf("Агент %v обрабатывает %v слагаемое...\n", a.N, i)
+				v1, v2 := comps[i-1], comps[i]
+				logger.Printf("Агент %v: '%s', '%s'\n", a.N, v1, v2)
+				pos := [3]int{-1, i - 1, i} // Координаты двух чисел
+				comps[i-1] = "X"
+				comps[i] = "X"
+				// Запускаем вычислитель
+				err := calcSum(v1, v2, pos, chRes, timesNow)
+				if err != nil {
+					panic(err)
+				}
+				logger.Printf("Агент %v запустил вычислитель сложения(вычитания) (%s + %s).\n", a.N, v1, v2)
+				expParts[pos] = "sum"
+				activeWorkers++
+				if activeWorkers == a.N_machines {
+					logger.Printf("Агент %v задействовал всех доступных вычислителей: %v (уровень обработки слагаемых).\n", a.N, activeWorkers)
+					break
 				}
 			}
 			logger.Printf("Агент %v произвел первичную обработку частей выражения, переходит в занятую фазу.\n", a.N)
 			
 			if val := countReal(comps); val != "" &&activeWorkers == 0 {
-				db.Exec("dbRes", a.N, val)
 				logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 				fmt.Println(taskId, ":", val, "=", val)
-				a.ResInformer <- true
-				// close(chRes)
+				grpcClient.SendResult(context.TODO(), &pb.ResultRequest{
+					AgentID: int32(a.N),
+					DivByZeroError: false,
+					Result: val,
+					ExpressionID: taskId,
+				})
 				continue
 			}
 			
@@ -304,9 +277,8 @@ func Agent(a *AgentComm) {
 			for {
 				logger.Printf("Агент %v ждет вычислителей...\n", a.N)
 				select {
-				case <-a.Ctx.Done(): // Смерть агента
+				case <-deathChannel: // Смерть агента
 					logger.Printf("Агент %v умирает...\n", a.N)
-					// wg.Done()
 					return
 				case num := <-chRes: // Получили значение от вычислителя
 					logger.Printf("Агент %v получил значение: ", a.N)
@@ -315,8 +287,11 @@ func Agent(a *AgentComm) {
 						loggerErr.Printf("Агент %v: в выражении присутствует деление на ноль.\n", a.N)
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 						fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
-						a.ResInformer <- false
-						// close(chRes)
+						grpcClient.SendResult(context.TODO(), &pb.ResultRequest{
+							AgentID: int32(a.N),
+							DivByZeroError: true,
+							ExpressionID: taskId,
+						})
 						break Busy
 					}
 					// fmt.Println("Didnt break busy")
@@ -340,8 +315,11 @@ func Agent(a *AgentComm) {
 							loggerErr.Printf("Агент %v: в выражении присутствует деление на ноль.\n", a.N)
 							logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 							fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
-							a.ResInformer <- false
-							// close(chRes)
+							grpcClient.SendResult(context.TODO(), &pb.ResultRequest{
+								AgentID: int32(a.N),
+								DivByZeroError: true,
+								ExpressionID: taskId,
+							})
 							break Busy
 						}
 						newParts[numPos[0]][numPos[1]] = ""
@@ -365,7 +343,7 @@ func Agent(a *AgentComm) {
 						}
 						elem := newParts[i]
 						if len(elem) > 1 { // Однозначные элементы на данном этапе уже в слайсе 'comps'
-							var free Queue = &ArrInt{}
+							var free QueueInt = &ArrInt{}
 							if !free.IsEmpty() {
 								panic("- ERROR - free.pop() is wrong! - ERROR -")
 							}
@@ -424,7 +402,7 @@ func Agent(a *AgentComm) {
 					// Ищем, что можно сложить / вычесть
 					logger.Printf("Агент %v начинает производить сложение слагаемых.\n", a.N)
 					logger.Println("Слайс слагаемых:", fmt.Sprint("[", strings.Join(comps, "'"), "]"))
-					var free Queue = &Arr{}
+					var free QueueInt = &ArrInt{}
 					if !free.IsEmpty() {
 						panic("- ERROR - free.pop() is wrong! - ERROR -")
 					}
@@ -480,8 +458,12 @@ func Agent(a *AgentComm) {
 						}
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 						fmt.Printf("%v: '%s' = '%v'\n", taskId, task, val)
-						a.ResInformer <- true
-						// close(chRes)
+						grpcClient.SendResult(context.TODO(), &pb.ResultRequest{
+							AgentID: int32(a.N),
+							DivByZeroError: false,
+							Result: val,
+							ExpressionID: taskId,
+						})
 						break Busy
 					}
 				}
@@ -498,6 +480,13 @@ type Queue interface {
 	Pop() (string, bool)
 	IsEmpty() bool
 }
+
+type QueueInt interface {
+	Append(n int)
+	Pop() (int, bool)
+	IsEmpty() bool
+}
+
 
 type ArrInt struct {
 	arr []int
@@ -593,12 +582,7 @@ func getTimes(n int) Times {
 	return *t
 }
 
-func proccessExp(newParts [][]string, taskId, N int, task string) ([][]string, error) {
-	if err = db.QueryRow("dbGet", taskId).Scan(&task); err != nil { // Получем выражение из БД
-		return [][]string{}, err
-	}
-	logger.Printf("Агент %v достал из БД выражение: '%s'\n", N, task)
-
+func proccessExp(_ [][]string, taskId string, N int, task string) ([][]string, error) {
 	// Разбивка выражения на слагаемые
 	parts := []string{}         // Слайс со слагаемыми
 	var next int                // Индекс следующего слагаемого
@@ -619,7 +603,7 @@ func proccessExp(newParts [][]string, taskId, N int, task string) ([][]string, e
 	// fmt.Println(strings.Join(parts, " | "))
 
 	// Разбивка слагаемых на множители (делители)
-	newParts = make([][]string, len(parts))
+	newParts := make([][]string, len(parts))
 	for j, part := range parts { // Проходимся по каждому слагаемому
 		newPart := []string{}
 		next = 0 // Обновляем индекс

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -24,10 +23,7 @@ var (
 	logger            *log.Logger = shared.Logger
 	loggerErr         *log.Logger = shared.LoggerErr
 	loggerHB          *log.Logger = shared.LoggerHeartbeats
-	Srv               *http.Server
-	manager           *AgentsManager
 	mu                *sync.RWMutex
-	agentsTimeout     *time.Duration
 )
 
 // Структура для мониторинга агентов (менеджер агентов)
@@ -87,6 +83,7 @@ func (q *Queue) IsEmpty() bool {
 
 // Конструктор монитора агентов
 func NewAgentsManager() *AgentsManager {
+	logger.Println("Мониторинг агентов реализован.")
 	return &AgentsManager{
 		Agents:       [vars.N_agents + 1]int{},
 		HbTime:       make(map[int]time.Time),
@@ -95,9 +92,21 @@ func NewAgentsManager() *AgentsManager {
 	}
 }
 
+func (m *AgentsManager) RegisterAgent(agentID int) error {
+	// Проверяем, зарегистрирован ли уже такой агент
+	if m.Agents[agentID] != 0 {
+		return errors.New("agent already registered")
+	}
+
+	m.Agents[agentID] = 1
+	m.HbTime[agentID] = time.Now()
+	m.HbTimeout[agentID] = getTimes()
+	return nil
+}
+
 // Хендлер на принятие выражения
 func (m *AgentsManager) HandleExpression(id, exp string) {
-	manager.TaskIds.Append(id, exp)
+	m.TaskIds.Append(id, exp)
 	log.Print("Менеджер агентов поставил выражение в очередь")
 }
 
@@ -106,6 +115,7 @@ func (m *AgentsManager) GiveExpression() (id string, exp string, username string
 }
 
 func (m *AgentsManager) TakeExpression(id string, agentID int) bool {
+	m.RegisterAgent(agentID)
 	ok := m.TaskIds.Take(id)
 	// Выражения с таким id нет в очереди
 	if !ok {
@@ -126,17 +136,17 @@ func (m *AgentsManager) TakeExpression(id string, agentID int) bool {
 
 // Хендлер на убийство агента
 func (m *AgentsManager) KillAgent() error {
-	allDead := true
+	allDeadLocal := true
 	for i := 1; i < vars.N_agents+1; i++ { // Ищем мертвого агента
 		mu.RLock()
-		agentStatus := manager.Agents[i]
+		agentStatus := m.Agents[i]
 		mu.RUnlock()
 		if agentStatus != 0 {
-			allDead = false
+			allDeadLocal = false
 			break
 		}
 	}
-	if allDead {
+	if allDeadLocal {
 		return errors.New("нет живых агентов")
 	}
 
@@ -144,14 +154,42 @@ func (m *AgentsManager) KillAgent() error {
 	return nil
 }
 
+var allDead bool = true
+
 // Хендлер на endpoint мониторинга агентов
 func (m *AgentsManager) Monitor() [][]int32 {
 	var agents = [][]int32{}
+	var n int
 	for i := 1; i < vars.N_agents+1; i++ {
-		mu.RLock()
-		agentStatus := manager.Agents[i]
-		mu.RUnlock()
-		agents = append(agents, []int32{int32(i), int32(agentStatus)})
+		mu.Lock()
+		agentStatus := m.Agents[i]
+		if agentStatus != 0 {
+			if time.Since(m.HbTime[i]) > m.HbTimeout[i] { // Агент не посылал хартбиты слишком долго
+				loggerHB.Println(time.Since(m.HbTime[i]), m.HbTime[i], m.HbTimeout[i])
+				loggerHB.Printf("Оркестратор - агент %v умер (таймаут).\n", i)
+				m.Agents[i] = 0
+				agents = append(agents, []int32{int32(i), int32(0)})
+			} else {
+				agents = append(agents, []int32{int32(i), int32(agentStatus)})
+				n++
+			}
+		} else {
+			agents = append(agents, []int32{int32(i), int32(0)})
+		}
+		mu.Unlock()
+	}
+
+	loggerHB.Println("Живых агентов:", n)
+	if n < 0 {
+		fmt.Printf("Оркестратор считает, что у нас %v живых агентов (где-то ошибка) :|\n", n)
+	} else if n == 0 {
+		if !allDead {
+			loggerHB.Println("Оркестратор - не осталось живых агентов!")
+			fmt.Println("Не осталось живых агентов!")
+			allDead = true
+		}
+	} else {
+		allDead = false
 	}
 	return agents
 }
@@ -159,140 +197,23 @@ func (m *AgentsManager) Monitor() [][]int32 {
 // Heartbeat
 func (m *AgentsManager) RegisterHeartbeat(i int) {
 	loggerHB.Printf("Оркестратор - получили хартбит от агента %v.\n", i)
+	if err = m.RegisterAgent(i); err == nil {
+		return
+	}
 	mu.Lock()
 	m.HbTime[i] = time.Now()
 	mu.Unlock()
 }
 
-// Горутина менеджера агентов, которая следит за их состоянием
-func (m *AgentsManager) MonitorAgents() {
-	logger.Println("Мониторинг агентов подключился.")
-	var n int
-	var allDead bool = true
-	for {
-		n = 0
-		for i := 1; i < vars.N_agents+1; i++ {
-			mu.RLock()
-			agentStatus := manager.Agents[i]
-			mu.RUnlock()
-			if agentStatus == 0 { // Агент не записан как живой
-				continue
-			}
-			loggerHB.Printf("Оркестратор - проверка агента %v...\n", i)
-
-			// Проверяем, живой ли агент
-			select {
-			case _, ok := <-m.Hb[i]:
-				if !ok {
-					loggerHB.Printf("Оркестратор - агент %v умер (закрыт канал хартбитов).\n", i)
-					mu.Lock()
-					m.Agents[i] = 0
-					mu.Unlock()
-				} else {
-					loggerHB.Printf("Оркестратор - получили хартбит от агента %v.\n", i)
-					m.HbTime[i] = time.Now()
-					allDead = false
-					n++
-				}
-			default:
-				if time.Since(m.HbTime[i]) > m.HbTimeout[i] { // Агент не посылал хартбиты слишком долго
-					loggerHB.Println(time.Since(m.HbTime[i]), m.HbTime[i], m.HbTimeout[i])
-					loggerHB.Printf("Оркестратор - агент %v умер (таймаут).\n", i)
-					mu.Lock()
-					m.Agents[i] = 0
-					mu.Unlock()
-				}
-			}
-			// Проверяем, не посчитал ли агент свое выражение
-			select {
-			case ok, alive := <-m.ResInformer[i]:
-				if !alive {
-					continue
-				}
-				var id int
-				var res string
-				err = db.QueryRow("orchestratorReceive", i).Scan(&id, &res)
-				fmt.Println(id, res)
-				if err != nil {
-					loggerErr.Println("Паника:", err)
-					logger.Println("Критическая ошибка, завершаем работу программы...")
-					logger.Println("Отправляем сигнал прерывания...")
-					ServerExitChannel <- os.Interrupt
-					logger.Println("Отправили сигнал прерывания.")
-					return
-				}
-				if ok {
-					logger.Printf("Получили результат от агента %v: %v.", i, res)
-					_, err = db.Exec("orchestratorUpdate", id, res, false)
-					if err != nil {
-						loggerErr.Println("Паника:", err)
-						logger.Println("Критическая ошибка, завершаем работу программы...")
-						logger.Println("Отправляем сигнал прерывания...")
-						ServerExitChannel <- os.Interrupt
-						logger.Println("Отправили сигнал прерывания.")
-						return
-					}
-				} else {
-					logger.Printf("Получили результат от агента %v: ошибка.", i)
-					_, err = db.Exec("orchestratorUpdate", id, res, true)
-					if err != nil {
-						loggerErr.Println("Паника:", err)
-						logger.Println("Критическая ошибка, завершаем работу программы...")
-						logger.Println("Отправляем сигнал прерывания...")
-						ServerExitChannel <- os.Interrupt
-						logger.Println("Отправили сигнал прерывания.")
-						return
-					}
-				}
-				logger.Println("Положили результат в БД.")
-				_, err = db.Exec("DELETE FROM agent_proccesses WHERE proccess_id = $1;", i)
-				if err != nil {
-					loggerErr.Println("Паника:", err)
-					logger.Println("Критическая ошибка, завершаем работу программы...")
-					logger.Println("Отправляем сигнал прерывания...")
-					ServerExitChannel <- os.Interrupt
-					logger.Println("Отправили сигнал прерывания.")
-					return
-				}
-				if !m.TaskIds.IsEmpty() {
-					if t, ok := m.TaskIds.Pop(); ok {
-						logger.Printf("Очередь выражений не пустая, отдаем агенту %v выражение с id %v.", i, t)
-						err = giveTaskToAgent(i, t)
-						if err == fmt.Errorf("agent did not receive task") { // Агент не принял выражение, видимо, уже занят
-							loggerErr.Println(
-								`Оркестратор: не смогли отдать выражению агенту (агент не принял),
-								 оставляем агента без задачи, кладем выражение обратно в очередь.`)
-							m.TaskIds.Append(t)
-							continue
-						} else if err != nil {
-							loggerErr.Println("Паника при попытке отдать агенту выражение:", err)
-							logger.Println("Критическая ошибка, завершаем работу программы...")
-							logger.Println("Отправляем сигнал прерывания...")
-							ServerExitChannel <- os.Interrupt
-							logger.Println("Отправили сигнал прерывания.")
-						}
-						return
-					} else {
-						loggerErr.Println("Слайс не пустой но пустой...")
-					}
-				} else {
-					logger.Printf("Очередь выражений пустая, агент %v отдыхает.", i)
-					mu.Lock()
-					m.Agents[i] = 1
-					mu.Unlock()
-				}
-			default:
-			}
-
-			loggerHB.Println("Живых агентов:", n)
-			if n < 0 {
-				fmt.Printf("Оркестратор считает, что у нас %v живых агентов (где-то ошибка) :|\n", n)
-			} else if n == 0 && !allDead {
-				loggerHB.Println("Оркестратор - не осталось живых агентов!")
-				fmt.Println("Не осталось живых агентов!")
-				allDead = true
-			}
-			time.Sleep(min(time.Second, vars.T_agentTimeout/5))
-		}
+// Функция для получения времени операций из БД
+func getTimes() time.Duration {
+	var timeout int
+	err = db.QueryRow("SELECT time FROM agent_timeout").Scan(&timeout)
+	if err != nil {
+		loggerErr.Panic(err)
 	}
+	AgentTimeout := time.Duration(timeout * 1_000_000)
+	logger.Printf("Время на таймаут:, %v\n", AgentTimeout)
+
+	return AgentTimeout
 }

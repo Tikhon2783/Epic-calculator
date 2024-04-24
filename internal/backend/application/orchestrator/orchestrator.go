@@ -32,7 +32,7 @@ var (
 	loggerErr         *log.Logger = shared.LoggerErr
 	loggerHB          *log.Logger = shared.LoggerHeartbeats
 	Srv               *http.Server
-	manager           *monitoring.AgentsManager
+	Manager           *monitoring.AgentsManager
 	mu                *sync.RWMutex
 	agentsTimeout     *time.Duration
 	OrchestratorServiceServer *Server
@@ -47,10 +47,11 @@ func NewServer() *Server {
 }
 
 // Основная горутина оркестратора
-func Launch() {
+func Launch(manager *monitoring.AgentsManager) {
 	logger.Println("Подключился оркестратор.")
 	fmt.Println("Оркестратор передаёт привет :)")
 	db = shared.Db
+	Manager = manager
 
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
@@ -116,8 +117,6 @@ func Launch() {
 		logger.Println("Отправили сигнал прерывания.")
 	}
 
-	manager = monitoring.NewAgentsManager()
-
 	// Запускаем gRPC сервер
 	host := "localhost"
 	port := vars.PortGrpc
@@ -159,7 +158,7 @@ func (s *Server) SendExp(ctx context.Context, req *pb.ExpSendRequest) (*pb.Agent
 		}, nil
 
 	}
-	manager.HandleExpression(id, exp)
+	Manager.HandleExpression(id, exp)
 	return &pb.AgentAndErrorResponse{
 		Error: []string{err.Error()},
 		Agent: -1,
@@ -167,7 +166,7 @@ func (s *Server) SendExp(ctx context.Context, req *pb.ExpSendRequest) (*pb.Agent
 }
 
 func (s *Server) Monitor(ctx context.Context, in *pb.EmptyMessage) (*pb.MonitorResponse, error) {
-	agents := manager.Monitor()
+	agents := Manager.Monitor()
 	var agentsReturn []*pb.MonitorResponse_SingleObj
 	for _, a := range agents {
 		agentsReturn = append(agentsReturn, &pb.MonitorResponse_SingleObj{
@@ -185,15 +184,16 @@ func (s *Server) KillOrch(ctx context.Context, in *pb.EmptyMessage) (*pb.ErrorRe
 }
 
 func (s *Server) SendHeartbeat(ctx context.Context, in *pb.HeartbeatRequest) (*pb.ErrorResponse, error) {
-	if manager.ToKill > 0 {
-		manager.ToKill--
+	if Manager.ToKill > 0 {
+		Manager.ToKill--
 		return &pb.ErrorResponse{Error: "dead"}, nil
 	}
-	manager.RegisterHeartbeat(int(in.AgentID))
+	Manager.RegisterHeartbeat(int(in.AgentID))
 	return &pb.ErrorResponse{}, nil
 }
 
 func (s *Server) SendResult(ctx context.Context, in *pb.ResultRequest) (*pb.EmptyMessage, error) {
+	Manager.RegisterHeartbeat(int(in.AgentID))
 	i := in.AgentID
 	res := in.Result
 	divByZero := in.DivByZeroError
@@ -227,8 +227,8 @@ func UpdateResult(context.Context, *pb.ExpUpdateRequest) (*pb.EmptyMessage, erro
 }
 
 func SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.ExpSeekResponse, error) {
-	manager.RegisterHeartbeat(int(in.AgentID))
-	id, exp, username, ok := manager.GiveExpression()
+	Manager.RegisterHeartbeat(int(in.AgentID))
+	id, exp, username, ok := Manager.GiveExpression()
 	if !ok {
 		return &pb.ExpSeekResponse{Found: false}, nil
 	}
@@ -252,7 +252,7 @@ func SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.ExpSeekResponse
 func ConfirmTakeExp(ctx context.Context, in *pb.ExpConfirmRequest) (*pb.ErrorResponse, error) {
 	agentID := int(in.AgentID)
 	id := in.ExpressionID
-	if !manager.TakeExpression(id, agentID) {
+	if !Manager.TakeExpression(id, agentID) {
 		return &pb.ErrorResponse{Error:"not in queue"}, nil
 	}
 	return &pb.ErrorResponse{}, nil
@@ -300,7 +300,7 @@ func GetTimes(username string) *agent.Times {
 		loggerErr.Panic(err)
 	}
 	t.AgentTimeout = time.Duration(timeout * 1_000_000)
-	logger.Printf("Время на таймаут:, %v\n", t.Div)
+	logger.Printf("Время на таймаут:, %v\n", t.AgentTimeout)
 
 	return t
 }
