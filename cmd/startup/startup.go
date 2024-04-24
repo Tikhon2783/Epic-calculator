@@ -283,7 +283,7 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 							vars.T_sum,
 							vars.T_sub,
 							vars.T_mult,
-							vars.T_div}[i])/1000000),
+							vars.T_div}[i])/1_000_000),
 					)
 					if err != nil {
 						loggerErr.Panic("не смогли добавить время в БД (", []string{
@@ -305,12 +305,15 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		go func() {
 			defer wg.Done()
 			_, err = db.Exec(
-				`CREATE TABLE IF NOT EXISTS agent_timeout (time integer NOT NULL);`,
+				`CREATE TABLE IF NOT EXISTS agent_timeout (time integer NOT NULL, field BOOL DEFAULT TRUE);`,
 			)
 			if err != nil {
 				panic(err)
 			}
 			_, err = db.Exec("INSERT INTO agent_timeout (time) VALUES ($1)", vars.T_agentTimeout/1_000_000)
+			if err != nil {
+				panic(err)
+			}
 			db_info.T_timeout = true
 			logger.Println("Создали таблицу с таймаутом.")
 		}()

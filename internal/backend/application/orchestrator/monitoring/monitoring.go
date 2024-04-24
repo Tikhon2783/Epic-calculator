@@ -1,23 +1,20 @@
 package monitoring
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"sync"
 	"time"
-	"errors"
 
-	"calculator/internal/backend/application/agent"
 	"calculator/internal"
 	"calculator/internal/config"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
-	"google.golang.org/grpc"
-	pb "calculator/internal/proto"
 )
 
 var (
@@ -38,8 +35,54 @@ type AgentsManager struct {
 	Agents [vars.N_agents + 1]int	// Кол-во живых агентов (0 - мертв, 1 - свободен, 2 - занят)
 	HbTime     	  map[int]time.Time	// Мапа с временем последних хартбитов
 	HbTimeout    map[int]time.Duration	// Мапа с временем таймаутов для каждого агента
-	TaskIds      agent.Queue	// Очередь не принятых агентами выражений
+	TaskIds      *Queue					// Очередь не принятых агентами выражений
 	ToKill		 int
+}
+
+type Queue struct {
+	exps map[string]string
+	mu  sync.Mutex
+}
+
+func (q *Queue) Append(id, exp string) {
+	q.mu.Lock()
+	q.exps[id] = exp
+	q.mu.Unlock()
+}
+
+func (q *Queue) Find() (id string, expression string, username string, found bool) {
+	if q.IsEmpty() {
+		return "", "", "", false
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for id, exp := range q.exps {
+		var username string
+		err = db.QueryRow("SELECT (username) FROM requests WHERE request_id=$1", id).Scan(&username)
+		if err != nil {
+			logger.Println("\t ПАНИКА, проверьте лог ошибок.")
+			loggerErr.Panic("Ошибка получения имени пользователя по ключу выражения из бд - ПАНИКА:", err)
+		}
+		return id, exp, username, true
+	}
+	return "", "", "", false
+}
+
+func (q * Queue) Take(id string) (bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	_, ok := q.exps[id]
+	if !ok {
+		return false
+	}
+	delete(q.exps, id)
+	return true
+}
+
+func (q *Queue) IsEmpty() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.exps) == 0
 }
 
 // Конструктор монитора агентов
@@ -48,21 +91,40 @@ func NewAgentsManager() *AgentsManager {
 		Agents:       [vars.N_agents + 1]int{},
 		HbTime:       make(map[int]time.Time),
 		HbTimeout:    make(map[int]time.Duration),
-		TaskIds:      &agent.ArrStr{},
+		TaskIds:      &Queue{},
 	}
 }
 
-type SrvSelfDestruct struct {
-	mu sync.Mutex
-}
-
-// Хендлер на принятиt выражения
-func (m *AgentsManager) HandleExpression(id string) {
-	manager.TaskIds.Append(id)
+// Хендлер на принятие выражения
+func (m *AgentsManager) HandleExpression(id, exp string) {
+	manager.TaskIds.Append(id, exp)
 	log.Print("Менеджер агентов поставил выражение в очередь")
 }
 
-// Хендлер на убийствj агента
+func (m *AgentsManager) GiveExpression() (id string, exp string, username string, ok bool) {
+	return m.TaskIds.Find()
+}
+
+func (m *AgentsManager) TakeExpression(id string, agentID int) bool {
+	ok := m.TaskIds.Take(id)
+	// Выражения с таким id нет в очереди
+	if !ok {
+		return false
+	}
+	_, err = db.Exec("orchestratorAssign", id, agentID)
+	if err != nil {
+		loggerErr.Println("Ошибка назначения выражению агента. "+
+		"До того, как агент отправит рез-т оркестратору, выражение будет отмечено как неотданное в БД, "+
+		"но его не будет в очереди менеджера. "+
+		"При определенных обстоятельствах оно может быть посчитано дважды. "+
+		"Пользователь будет видеть, что оно еще в очереди. Ошибка:",
+		err)
+		return false
+	}
+	return true
+}
+
+// Хендлер на убийство агента
 func (m *AgentsManager) KillAgent() error {
 	allDead := true
 	for i := 1; i < vars.N_agents+1; i++ { // Ищем мертвого агента
@@ -83,17 +145,24 @@ func (m *AgentsManager) KillAgent() error {
 }
 
 // Хендлер на endpoint мониторинга агентов
-func (m *AgentsManager) Monitor() [][]string {
-	var agents = [][]string{{"Агент", "Состояние"}}
+func (m *AgentsManager) Monitor() [][]int32 {
+	var agents = [][]int32{}
 	for i := 1; i < vars.N_agents+1; i++ {
 		mu.RLock()
 		agentStatus := manager.Agents[i]
 		mu.RUnlock()
-		agents = append(agents, []string{fmt.Sprint("Агент ", i), map[int]string{0: "мертв", 1: "свободен", 2: "считает"}[agentStatus]})
+		agents = append(agents, []int32{int32(i), int32(agentStatus)})
 	}
 	return agents
 }
 
+// Heartbeat
+func (m *AgentsManager) RegisterHeartbeat(i int) {
+	loggerHB.Printf("Оркестратор - получили хартбит от агента %v.\n", i)
+	mu.Lock()
+	m.HbTime[i] = time.Now()
+	mu.Unlock()
+}
 
 // Горутина менеджера агентов, которая следит за их состоянием
 func (m *AgentsManager) MonitorAgents() {

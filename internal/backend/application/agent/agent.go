@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -366,7 +365,7 @@ func Agent(a *AgentComm) {
 						}
 						elem := newParts[i]
 						if len(elem) > 1 { // Однозначные элементы на данном этапе уже в слайсе 'comps'
-							var free Queue = &Arr{}
+							var free Queue = &ArrInt{}
 							if !free.IsEmpty() {
 								panic("- ERROR - free.pop() is wrong! - ERROR -")
 							}
@@ -503,6 +502,27 @@ type Queue interface {
 type ArrInt struct {
 	arr []int
 	mu  sync.Mutex
+}
+
+func (a *ArrInt) Append(n int) {
+	a.mu.Lock()
+	a.arr = append(a.arr, n)
+	a.mu.Unlock()
+}
+
+func (a *ArrInt) Pop() (int, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.arr) == 0 {
+		return 0, false
+	}
+	n := a.arr[0]
+	a.arr = a.arr[1:]
+	return n, true
+}
+
+func (a *ArrInt) IsEmpty() bool {
+	return len(a.arr) == 0
 }
 
 type ArrStr struct {

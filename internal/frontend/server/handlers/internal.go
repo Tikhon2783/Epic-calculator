@@ -116,9 +116,9 @@ func HandleExpressionInternal(w http.ResponseWriter, r *http.Request) {
 	case 0:
 		fmt.Fprintln(w, "Ошибка отправки запроса")
 	case -1:
-		fmt.Fprintln(w, "Выражение успешно принятно оркестратором и поставлено в очередь.")
+		fmt.Fprintln(w, "Выражение успешно принятно оркестратором и поставлено в очередь. ID:", uuid)
 	default:
-		fmt.Fprintf(w, "Выражение успешно принятно оркестратором и переданно агенту %d.", resp.Agent)
+		fmt.Fprintf(w, "Выражение успешно принятно оркестратором и переданно агенту %d. ID: %s", resp.Agent, uuid)
 	}
 	logger.Printf("Запрос на подсчет выражения обработан (resp.Agent = %d).", resp.Agent)
 }
@@ -344,7 +344,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 		)
 
 		// Изменяем значения
-		for i, val := range []string{tSum, tSub, tMult, tDiv, tAgent} {
+		for i, val := range []string{tSum, tSub, tMult, tDiv} {
 			if val == "" { // Не получили запрос на изменение данной переменной
 				continue
 			}
@@ -365,7 +365,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(
 					w,
 					"Время на %s было введено отрицательное, пропускаем...",
-					[]string{"сложение", "вычитание", "умножение", "деление", "таймаут"}[i],
+					[]string{"сложение", "вычитание", "умножение", "деление"}[i],
 				)
 				continue
 			}
@@ -376,7 +376,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("UPDATE %s.time_vars (", u)+
 					`SET time = $2
 					WHERE action = $1`,
-				[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
+				[]string{"summation", "substraction", "multiplication", "division"}[i],
 				t/1_000_000,
 			)
 			if err != nil {
@@ -384,11 +384,35 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 				loggerErr.Printf(
 					"Оркестратор: ошибка изменения значения %s на %s в БД: %s",
 					err,
-					[]string{"summation", "substraction", "multiplication", "division", "agent_timeout"}[i],
+					[]string{"summation", "substraction", "multiplication", "division"}[i],
 					t,
 				)
 			}
 		}
+		// Таймаут
+		if tAgent != "" {
+			fmt.Printf("'%s'\n", tAgent)
+			t, err := time.ParseDuration(tAgent)
+			if err != nil {
+				logger.Println("Сервер: ошибка парсинга времени")
+				loggerErr.Printf(
+					"Сервер: ошибка парсинга (%s): %s",
+					tAgent,
+					err,
+				)
+			} else {
+				// Проверяем на валидность значения
+				if t < 0 {
+					fmt.Fprintf(w, "Время на таймаут было введено отрицательное, пропускаем...")
+				} else {
+					_, err = db.Exec("UPDATE agent_timeout (time) VALUES ($1) WHERE field=TRUE", t/1_000_000)
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
+		}
+
 	// Если метод не POST и не GET, возвращаем ошибку
 	} else if r.Method != http.MethodGet {
 		logger.Println("Неправильный метод, выражение не обрабатывается.")
@@ -397,7 +421,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Получаем значения и возвращаем
-	times := orchestrator.GetTimes()
+	times := orchestrator.GetTimes(username)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(times); err != nil {
 		http.Error(w, "Error encoding default data", http.StatusInternalServerError)

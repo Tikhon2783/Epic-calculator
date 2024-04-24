@@ -1,24 +1,27 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
-	"calculator/internal/backend/application/agent"
 	"calculator/internal"
+	"calculator/internal/backend/application/agent"
 	"calculator/internal/backend/application/orchestrator/monitoring"
 	"calculator/internal/config"
+
+	pb "calculator/internal/proto"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
 	"google.golang.org/grpc"
-	pb "calculator/internal/proto"
 )
 
 var (
@@ -36,7 +39,7 @@ var (
 )
 
 type Server struct {
-	pb.OrchestratorServiceClient // сервис из сгенерированного пакета
+	pb.OrchestratorServiceServer // сервис из сгенерированного пакета
 }
 
 func NewServer() *Server {
@@ -52,7 +55,7 @@ func Launch() {
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
 		"orchestratorPut",
-		`INSERT INTO requests (request_id, expression, agent_proccess)
+		`INSERT INTO requests (request_id, username, expression)
 		VALUES ($1, $2, $3);`,
 	)
 	if err != nil {
@@ -113,6 +116,8 @@ func Launch() {
 		logger.Println("Отправили сигнал прерывания.")
 	}
 
+	manager = monitoring.NewAgentsManager()
+
 	// Запускаем gRPC сервер
 	host := "localhost"
 	port := vars.PortGrpc
@@ -139,9 +144,123 @@ func Launch() {
 	}
 }
 
+func (s *Server) SendExp(ctx context.Context, req *pb.ExpSendRequest) (*pb.AgentAndErrorResponse, error) {
+	id := req.Id
+	exp := req.Expression
+	username := req.Username
+
+	_, err = db.Exec("orchestratorPut", id, username, exp)
+	if err != nil {
+		logger.Println("Оркестратор: ошибка помещения выражения в БД.")
+		loggerErr.Println("Ошибка помещения выражения в БД:", err)
+		return &pb.AgentAndErrorResponse{
+			Error: []string{err.Error()},
+			Agent: 0,
+		}, nil
+
+	}
+	manager.HandleExpression(id, exp)
+	return &pb.AgentAndErrorResponse{
+		Error: []string{err.Error()},
+		Agent: -1,
+	}, nil
+}
+
+func (s *Server) Monitor(ctx context.Context, in *pb.EmptyMessage) (*pb.MonitorResponse, error) {
+	agents := manager.Monitor()
+	var agentsReturn []*pb.MonitorResponse_SingleObj
+	for _, a := range agents {
+		agentsReturn = append(agentsReturn, &pb.MonitorResponse_SingleObj{
+			Id:  a[0],
+			State: a[1],
+		})
+	}
+	return &pb.MonitorResponse{
+		States: agentsReturn,
+	}, nil
+}
+
+func (s *Server) KillOrch(ctx context.Context, in *pb.EmptyMessage) (*pb.ErrorResponse, error) {
+	return &pb.ErrorResponse{}, nil
+}
+
+func (s *Server) SendHeartbeat(ctx context.Context, in *pb.HeartbeatRequest) (*pb.ErrorResponse, error) {
+	if manager.ToKill > 0 {
+		manager.ToKill--
+		return &pb.ErrorResponse{Error: "dead"}, nil
+	}
+	manager.RegisterHeartbeat(int(in.AgentID))
+	return &pb.ErrorResponse{}, nil
+}
+
+func (s *Server) SendResult(ctx context.Context, in *pb.ResultRequest) (*pb.EmptyMessage, error) {
+	i := in.AgentID
+	res := in.Result
+	divByZero := in.DivByZeroError
+	id := in.ExpressionID
+	if !divByZero {
+		logger.Printf("Получили результат от агента %v: %v.", i, res)
+		_, err = db.Exec("orchestratorUpdate", id, res, false)
+	} else {
+		logger.Printf("Получили результат от агента %v: ошибка.", i)
+		_, err = db.Exec("orchestratorUpdate", id, res, true)
+	}
+	if err != nil {
+		loggerErr.Println("Ошибка обновления выражения в БД:", err)
+		logger.Println("Ошибка обновления выражения в БД.")
+		return &pb.EmptyMessage{}, err
+	}
+
+	logger.Println("Положили результат в БД.")
+	_, err = db.Exec("DELETE FROM agent_proccesses WHERE proccess_id = $1;", i)
+	if err != nil {
+		loggerErr.Println("Ошибка удаления выражения из таблицы с агентами:", err)
+		logger.Println("Ошибка обновления выражения в таблице агентов.")
+		return &pb.EmptyMessage{}, err
+	}
+	logger.Println("Возвращаем путой ответ агенту.")
+	return &pb.EmptyMessage{}, nil
+}
+
+func UpdateResult(context.Context, *pb.ExpUpdateRequest) (*pb.EmptyMessage, error) {
+	return &pb.EmptyMessage{}, nil
+}
+
+func SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.ExpSeekResponse, error) {
+	manager.RegisterHeartbeat(int(in.AgentID))
+	id, exp, username, ok := manager.GiveExpression()
+	if !ok {
+		return &pb.ExpSeekResponse{Found: false}, nil
+	}
+	t := GetTimes(username)
+	return &pb.ExpSeekResponse{
+		Found: true,
+		Expression: exp,
+		Times: &pb.TimesResponse{
+			Summation: t.Sum.Nanoseconds(),
+			Substraction: t.Sub.Nanoseconds(),
+			Multiplication: t.Mult.Nanoseconds(),
+			Division: t.Div.Nanoseconds(),
+			AgentTimeout: t.AgentTimeout.Nanoseconds(),
+			Error: []string{},
+			Username: username,
+		},
+		ExpressionID: id,
+	}, nil
+}
+
+func ConfirmTakeExp(ctx context.Context, in *pb.ExpConfirmRequest) (*pb.ErrorResponse, error) {
+	agentID := int(in.AgentID)
+	id := in.ExpressionID
+	if !manager.TakeExpression(id, agentID) {
+		return &pb.ErrorResponse{Error:"not in queue"}, nil
+	}
+	return &pb.ErrorResponse{}, nil
+}
+
 // Функция для получения времени операций из БД
-func GetTimes() *agent.Times {
-	rows, err := db.Query("SELECT action, time from time_vars;")
+func GetTimes(username string) *agent.Times {
+	rows, err := db.Query(fmt.Sprintf("SELECT (action, time) FROM %s.time_vars;", strings.ReplaceAll(username, " ", "")))
 	if err != nil {
 		loggerErr.Panic(err)
 	}
@@ -158,27 +277,31 @@ func GetTimes() *agent.Times {
 		}
 		switch t_type {
 		case "summation":
-			t.Sum = time.Duration(t_time * 1000000)
-			logger.Printf("Время на сложение:, %v\n", t.Sum)
+			t.Sum = time.Duration(t_time * 1_000_000)
+			logger.Printf("Время на сложение пользователя %s:, %v\n", username, t.Sum)
 		case "substraction":
-			t.Sub = time.Duration(t_time * 1000000)
-			logger.Printf("Время на вычитание:, %v\n", t.Sub)
+			t.Sub = time.Duration(t_time * 1_000_000)
+			logger.Printf("Время на вычитание пользователя %s:, %v\n", t.Sub)
 		case "multiplication":
-			t.Mult = time.Duration(t_time * 1000000)
-			logger.Printf("Время на умножение:, %v\n", t.Mult)
+			t.Mult = time.Duration(t_time * 1_000_000)
+			logger.Printf("Время на умножение пользователя %s:, %v\n", t.Mult)
 		case "division":
-			t.Div = time.Duration(t_time * 1000000)
-			logger.Printf("Время на деление:, %v\n", t.Div)
-		case "agent_timeout":
-			t.AgentTimeout = time.Duration(t_time * 1000000)
-			logger.Printf("Таймаут агентов — %v\n", t.AgentTimeout)
-			agentsTimeout = &t.AgentTimeout
+			t.Div = time.Duration(t_time * 1_000_000)
+			logger.Printf("Время на деление пользователя %s:, %v\n", t.Div)
 		}
 	}
 	err = rows.Err()
 	if err != nil {
 		loggerErr.Panic(err)
 	}
+	var timeout int
+	err = db.QueryRow("SELECT time FROM agent_timeout").Scan(&timeout)
+	if err != nil {
+		loggerErr.Panic(err)
+	}
+	t.AgentTimeout = time.Duration(timeout * 1_000_000)
+	logger.Printf("Время на таймаут:, %v\n", t.Div)
+
 	return t
 }
 
@@ -186,8 +309,9 @@ func GetTimes() *agent.Times {
 func CheckWorkLeft(m *monitoring.AgentsManager) {
 	logger.Println("Оркестратор: проверка на непосчитанные выражения...")
 	var id string
+	var exp string
 	rows, err := db.Query(
-		`SELECT request_id FROM requests
+		`SELECT (request_id, expression) FROM requests
 			WHERE calculated = FALSE`,
 	)
 	if err != nil {
@@ -201,7 +325,7 @@ func CheckWorkLeft(m *monitoring.AgentsManager) {
 
 	for rows.Next() {
 		logger.Println("Оркестратор нашел непосчитанное выражение...")
-		err := rows.Scan(&id)
+		err := rows.Scan(&id, &exp)
 		if err != nil {
 			loggerErr.Println("Паника:", err)
 			logger.Println("Критическая ошибка, завершаем работу программы...")
@@ -211,7 +335,7 @@ func CheckWorkLeft(m *monitoring.AgentsManager) {
 		}
 
 		logger.Println("Отдаем выражение менеджеру...")
-		m.HandleExpression(id)
+		m.HandleExpression(id, exp)
 	}
 	err = rows.Err()
 	if err != nil {
