@@ -23,10 +23,6 @@ const (
 	OrchestratorService_KillAgent_FullMethodName      = "/calc.OrchestratorService/KillAgent"
 	OrchestratorService_ReviveAgent_FullMethodName    = "/calc.OrchestratorService/ReviveAgent"
 	OrchestratorService_SendExp_FullMethodName        = "/calc.OrchestratorService/SendExp"
-	OrchestratorService_CheckExp_FullMethodName       = "/calc.OrchestratorService/CheckExp"
-	OrchestratorService_GetExps_FullMethodName        = "/calc.OrchestratorService/GetExps"
-	OrchestratorService_GetTimes_FullMethodName       = "/calc.OrchestratorService/GetTimes"
-	OrchestratorService_SetTimes_FullMethodName       = "/calc.OrchestratorService/SetTimes"
 	OrchestratorService_Monitor_FullMethodName        = "/calc.OrchestratorService/Monitor"
 	OrchestratorService_SendHeartbeat_FullMethodName  = "/calc.OrchestratorService/SendHeartbeat"
 	OrchestratorService_SendResult_FullMethodName     = "/calc.OrchestratorService/SendResult"
@@ -44,13 +40,9 @@ type OrchestratorServiceClient interface {
 	KillAgent(ctx context.Context, in *EmptyMessage, opts ...grpc.CallOption) (*AgentAndErrorResponse, error)
 	ReviveAgent(ctx context.Context, in *EmptyMessage, opts ...grpc.CallOption) (*AgentAndErrorResponse, error)
 	SendExp(ctx context.Context, in *ExpSendRequest, opts ...grpc.CallOption) (*AgentAndErrorResponse, error)
-	CheckExp(ctx context.Context, in *ExpCheckRequest, opts ...grpc.CallOption) (*ExpCheckResponse, error)
-	GetExps(ctx context.Context, in *UsernameOnlyRequest, opts ...grpc.CallOption) (*ExpsGetResponse, error)
-	GetTimes(ctx context.Context, in *UsernameOnlyRequest, opts ...grpc.CallOption) (*TimesResponse, error)
-	SetTimes(ctx context.Context, in *TimesSetRequest, opts ...grpc.CallOption) (*TimesSetResponse, error)
 	Monitor(ctx context.Context, in *EmptyMessage, opts ...grpc.CallOption) (*MonitorResponse, error)
 	// методы для общения агентов с оркестратором
-	SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*EmptyMessage, error)
+	SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*ErrorResponse, error)
 	SendResult(ctx context.Context, in *ResultRequest, opts ...grpc.CallOption) (*EmptyMessage, error)
 	UpdateResult(ctx context.Context, in *ExpUpdateRequest, opts ...grpc.CallOption) (*EmptyMessage, error)
 	SeekForExp(ctx context.Context, in *ExpSeekRequest, opts ...grpc.CallOption) (*ExpSeekResponse, error)
@@ -101,42 +93,6 @@ func (c *orchestratorServiceClient) SendExp(ctx context.Context, in *ExpSendRequ
 	return out, nil
 }
 
-func (c *orchestratorServiceClient) CheckExp(ctx context.Context, in *ExpCheckRequest, opts ...grpc.CallOption) (*ExpCheckResponse, error) {
-	out := new(ExpCheckResponse)
-	err := c.cc.Invoke(ctx, OrchestratorService_CheckExp_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *orchestratorServiceClient) GetExps(ctx context.Context, in *UsernameOnlyRequest, opts ...grpc.CallOption) (*ExpsGetResponse, error) {
-	out := new(ExpsGetResponse)
-	err := c.cc.Invoke(ctx, OrchestratorService_GetExps_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *orchestratorServiceClient) GetTimes(ctx context.Context, in *UsernameOnlyRequest, opts ...grpc.CallOption) (*TimesResponse, error) {
-	out := new(TimesResponse)
-	err := c.cc.Invoke(ctx, OrchestratorService_GetTimes_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *orchestratorServiceClient) SetTimes(ctx context.Context, in *TimesSetRequest, opts ...grpc.CallOption) (*TimesSetResponse, error) {
-	out := new(TimesSetResponse)
-	err := c.cc.Invoke(ctx, OrchestratorService_SetTimes_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *orchestratorServiceClient) Monitor(ctx context.Context, in *EmptyMessage, opts ...grpc.CallOption) (*MonitorResponse, error) {
 	out := new(MonitorResponse)
 	err := c.cc.Invoke(ctx, OrchestratorService_Monitor_FullMethodName, in, out, opts...)
@@ -146,8 +102,8 @@ func (c *orchestratorServiceClient) Monitor(ctx context.Context, in *EmptyMessag
 	return out, nil
 }
 
-func (c *orchestratorServiceClient) SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*EmptyMessage, error) {
-	out := new(EmptyMessage)
+func (c *orchestratorServiceClient) SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*ErrorResponse, error) {
+	out := new(ErrorResponse)
 	err := c.cc.Invoke(ctx, OrchestratorService_SendHeartbeat_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -200,13 +156,9 @@ type OrchestratorServiceServer interface {
 	KillAgent(context.Context, *EmptyMessage) (*AgentAndErrorResponse, error)
 	ReviveAgent(context.Context, *EmptyMessage) (*AgentAndErrorResponse, error)
 	SendExp(context.Context, *ExpSendRequest) (*AgentAndErrorResponse, error)
-	CheckExp(context.Context, *ExpCheckRequest) (*ExpCheckResponse, error)
-	GetExps(context.Context, *UsernameOnlyRequest) (*ExpsGetResponse, error)
-	GetTimes(context.Context, *UsernameOnlyRequest) (*TimesResponse, error)
-	SetTimes(context.Context, *TimesSetRequest) (*TimesSetResponse, error)
 	Monitor(context.Context, *EmptyMessage) (*MonitorResponse, error)
 	// методы для общения агентов с оркестратором
-	SendHeartbeat(context.Context, *HeartbeatRequest) (*EmptyMessage, error)
+	SendHeartbeat(context.Context, *HeartbeatRequest) (*ErrorResponse, error)
 	SendResult(context.Context, *ResultRequest) (*EmptyMessage, error)
 	UpdateResult(context.Context, *ExpUpdateRequest) (*EmptyMessage, error)
 	SeekForExp(context.Context, *ExpSeekRequest) (*ExpSeekResponse, error)
@@ -230,22 +182,10 @@ func (UnimplementedOrchestratorServiceServer) ReviveAgent(context.Context, *Empt
 func (UnimplementedOrchestratorServiceServer) SendExp(context.Context, *ExpSendRequest) (*AgentAndErrorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendExp not implemented")
 }
-func (UnimplementedOrchestratorServiceServer) CheckExp(context.Context, *ExpCheckRequest) (*ExpCheckResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CheckExp not implemented")
-}
-func (UnimplementedOrchestratorServiceServer) GetExps(context.Context, *UsernameOnlyRequest) (*ExpsGetResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetExps not implemented")
-}
-func (UnimplementedOrchestratorServiceServer) GetTimes(context.Context, *UsernameOnlyRequest) (*TimesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTimes not implemented")
-}
-func (UnimplementedOrchestratorServiceServer) SetTimes(context.Context, *TimesSetRequest) (*TimesSetResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetTimes not implemented")
-}
 func (UnimplementedOrchestratorServiceServer) Monitor(context.Context, *EmptyMessage) (*MonitorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Monitor not implemented")
 }
-func (UnimplementedOrchestratorServiceServer) SendHeartbeat(context.Context, *HeartbeatRequest) (*EmptyMessage, error) {
+func (UnimplementedOrchestratorServiceServer) SendHeartbeat(context.Context, *HeartbeatRequest) (*ErrorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendHeartbeat not implemented")
 }
 func (UnimplementedOrchestratorServiceServer) SendResult(context.Context, *ResultRequest) (*EmptyMessage, error) {
@@ -341,78 +281,6 @@ func _OrchestratorService_SendExp_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OrchestratorServiceServer).SendExp(ctx, req.(*ExpSendRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _OrchestratorService_CheckExp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExpCheckRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(OrchestratorServiceServer).CheckExp(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: OrchestratorService_CheckExp_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OrchestratorServiceServer).CheckExp(ctx, req.(*ExpCheckRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _OrchestratorService_GetExps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UsernameOnlyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(OrchestratorServiceServer).GetExps(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: OrchestratorService_GetExps_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OrchestratorServiceServer).GetExps(ctx, req.(*UsernameOnlyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _OrchestratorService_GetTimes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UsernameOnlyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(OrchestratorServiceServer).GetTimes(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: OrchestratorService_GetTimes_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OrchestratorServiceServer).GetTimes(ctx, req.(*UsernameOnlyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _OrchestratorService_SetTimes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TimesSetRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(OrchestratorServiceServer).SetTimes(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: OrchestratorService_SetTimes_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OrchestratorServiceServer).SetTimes(ctx, req.(*TimesSetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -547,22 +415,6 @@ var OrchestratorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendExp",
 			Handler:    _OrchestratorService_SendExp_Handler,
-		},
-		{
-			MethodName: "CheckExp",
-			Handler:    _OrchestratorService_CheckExp_Handler,
-		},
-		{
-			MethodName: "GetExps",
-			Handler:    _OrchestratorService_GetExps_Handler,
-		},
-		{
-			MethodName: "GetTimes",
-			Handler:    _OrchestratorService_GetTimes_Handler,
-		},
-		{
-			MethodName: "SetTimes",
-			Handler:    _OrchestratorService_SetTimes_Handler,
 		},
 		{
 			MethodName: "Monitor",

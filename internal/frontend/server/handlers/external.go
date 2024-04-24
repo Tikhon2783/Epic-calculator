@@ -6,10 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	// "calculator/internal"
-	shared "calculator/internal"
+	"calculator/internal"
 	"calculator/internal/jwt-stuff"
-	// "calculator/internal/errors"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"

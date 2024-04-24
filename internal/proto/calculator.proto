@@ -119,7 +119,7 @@ service OrchestratorService {
     rpc Monitor (EmptyMessage) returns (MonitorResponse);
 
     // методы для общения агентов с оркестратором
-    rpc SendHeartbeat (HeartbeatRequest) returns (EmptyMessage);
+    rpc SendHeartbeat (HeartbeatRequest) returns (ErrorResponse);
     rpc SendResult (ResultRequest) returns (EmptyMessage);
     rpc UpdateResult (ExpUpdateRequest) returns (EmptyMessage);
     rpc SeekForExp (ExpSeekRequest) returns (ExpSeekResponse);

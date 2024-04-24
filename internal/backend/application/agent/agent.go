@@ -36,14 +36,12 @@ type Times struct {
 }
 
 // Структура агента
-type AgentComm struct {
-	N            int
-	Ctx          context.Context
-	Heartbeat    chan<- struct{}
-	Timeout		 time.Duration
-	TaskInformer <-chan int
-	ResInformer  chan<- bool
-	N_machines   int
+type AgentComm struct{
+	N			int
+	Host		string
+	Port		string
+	Timeout		time.Duration
+	N_machines	int
 }
 
 // Горутина агента
@@ -497,34 +495,40 @@ func Agent(a *AgentComm) {
 }
 
 type Queue interface {
-	Append(n int)
-	Pop() (int, bool)
+	Append(n string)
+	Pop() (string, bool)
 	IsEmpty() bool
 }
 
-type Arr struct {
+type ArrInt struct {
 	arr []int
 	mu  sync.Mutex
 }
 
-func (a *Arr) Append(n int) {
+type ArrStr struct {
+	arr []string
+	mu  sync.Mutex
+}
+
+
+func (a *ArrStr) Append(n string) {
 	a.mu.Lock()
 	a.arr = append(a.arr, n)
 	a.mu.Unlock()
 }
 
-func (a *Arr) Pop() (int, bool) {
+func (a *ArrStr) Pop() (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if len(a.arr) == 0 {
-		return 0, false
+		return "", false
 	}
 	n := a.arr[0]
 	a.arr = a.arr[1:]
 	return n, true
 }
 
-func (a *Arr) IsEmpty() bool {
+func (a *ArrStr) IsEmpty() bool {
 	return len(a.arr) == 0
 }
 
