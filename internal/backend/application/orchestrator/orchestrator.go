@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"calculator/internal"
@@ -26,15 +25,12 @@ import (
 
 var (
 	ServerExitChannel chan os.Signal = make(chan os.Signal, 1)
-	db                *pgx.ConnPool  = shared.Db
+	db                *pgx.ConnPool  = shared.GetDb()
 	err               error
 	logger            *log.Logger = shared.Logger
 	loggerErr         *log.Logger = shared.LoggerErr
-	loggerHB          *log.Logger = shared.LoggerHeartbeats
 	Srv               *http.Server
 	Manager           *monitoring.AgentsManager
-	mu                *sync.RWMutex
-	agentsTimeout     *time.Duration
 	OrchestratorServiceServer *Server
 )
 
@@ -50,7 +46,7 @@ func NewServer() *Server {
 func Launch(manager *monitoring.AgentsManager) {
 	logger.Println("Подключился оркестратор.")
 	fmt.Println("Оркестратор передаёт привет :)")
-	db = shared.Db
+	db = shared.GetDb()
 	Manager = manager
 
 	// Подготавливаем запросы в БД
@@ -160,7 +156,7 @@ func (s *Server) SendExp(ctx context.Context, req *pb.ExpSendRequest) (*pb.Agent
 	}
 	Manager.HandleExpression(id, exp)
 	return &pb.AgentAndErrorResponse{
-		Error: []string{err.Error()},
+		Error: []string{},
 		Agent: -1,
 	}, nil
 }
@@ -222,11 +218,11 @@ func (s *Server) SendResult(ctx context.Context, in *pb.ResultRequest) (*pb.Empt
 	return &pb.EmptyMessage{}, nil
 }
 
-func UpdateResult(context.Context, *pb.ExpUpdateRequest) (*pb.EmptyMessage, error) {
+func (s *Server) UpdateResult(context.Context, *pb.ExpUpdateRequest) (*pb.EmptyMessage, error) {
 	return &pb.EmptyMessage{}, nil
 }
 
-func SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.ExpSeekResponse, error) {
+func (s *Server) SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.ExpSeekResponse, error) {
 	Manager.RegisterHeartbeat(int(in.AgentID))
 	id, exp, username, ok := Manager.GiveExpression()
 	if !ok {
@@ -249,7 +245,7 @@ func SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.ExpSeekResponse
 	}, nil
 }
 
-func ConfirmTakeExp(ctx context.Context, in *pb.ExpConfirmRequest) (*pb.ErrorResponse, error) {
+func (s *Server) ConfirmTakeExp(ctx context.Context, in *pb.ExpConfirmRequest) (*pb.ErrorResponse, error) {
 	agentID := int(in.AgentID)
 	id := in.ExpressionID
 	if !Manager.TakeExpression(id, agentID) {
@@ -260,7 +256,8 @@ func ConfirmTakeExp(ctx context.Context, in *pb.ExpConfirmRequest) (*pb.ErrorRes
 
 // Функция для получения времени операций из БД
 func GetTimes(username string) *agent.Times {
-	rows, err := db.Query(fmt.Sprintf("SELECT (action, time) FROM %s.time_vars;", strings.ReplaceAll(username, " ", "")))
+	db = shared.GetDb()
+	rows, err := db.Query(fmt.Sprintf("SELECT action, time FROM %s.time_vars;", strings.ReplaceAll(username, " ", "")))
 	if err != nil {
 		loggerErr.Panic(err)
 	}
@@ -281,13 +278,13 @@ func GetTimes(username string) *agent.Times {
 			logger.Printf("Время на сложение пользователя %s:, %v\n", username, t.Sum)
 		case "substraction":
 			t.Sub = time.Duration(t_time * 1_000_000)
-			logger.Printf("Время на вычитание пользователя %s:, %v\n", t.Sub)
+			logger.Printf("Время на вычитание пользователя %s:, %v\n", username, t.Sub)
 		case "multiplication":
 			t.Mult = time.Duration(t_time * 1_000_000)
-			logger.Printf("Время на умножение пользователя %s:, %v\n", t.Mult)
+			logger.Printf("Время на умножение пользователя %s:, %v\n", username, t.Mult)
 		case "division":
 			t.Div = time.Duration(t_time * 1_000_000)
-			logger.Printf("Время на деление пользователя %s:, %v\n", t.Div)
+			logger.Printf("Время на деление пользователя %s:, %v\n", username, t.Div)
 		}
 	}
 	err = rows.Err()
@@ -307,12 +304,13 @@ func GetTimes(username string) *agent.Times {
 
 // Функция, которая проверяет, есть ли в БД непосчитанные выражения
 func CheckWorkLeft(m *monitoring.AgentsManager) {
+	db = shared.GetDb()
 	logger.Println("Оркестратор: проверка на непосчитанные выражения...")
 	var id string
 	var exp string
 	rows, err := db.Query(
-		`SELECT (request_id, expression) FROM requests
-			WHERE calculated = FALSE`,
+		`SELECT request_id, expression FROM requests
+			WHERE calculated = FALSE;`,
 	)
 	if err != nil {
 		loggerErr.Println("Паника:", err)

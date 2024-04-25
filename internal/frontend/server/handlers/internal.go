@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,27 +9,28 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"encoding/json"
 
 	"calculator/internal"
 	"calculator/internal/backend/application/orchestrator"
 	"calculator/internal/config"
 	"calculator/internal/errors"
+	"calculator/internal/frontend/server/middlewares"
 	"calculator/internal/frontend/server/utils"
 	"calculator/internal/jwt-stuff"
 
+	pb "calculator/internal/proto"
+
+	"github.com/google/uuid"
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
-	pb "calculator/internal/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure" // для упрощения не будем использовать SSL/TLS аутентификация
-	"github.com/google/uuid"
 )
 
 var (
 	ServerExitChannel chan os.Signal = make(chan os.Signal, 1)
-	db                *pgx.ConnPool  = shared.Db
+	db                *pgx.ConnPool  = shared.GetDb()
 	err               error
 	logger            *log.Logger = shared.Logger
 	loggerErr         *log.Logger = shared.LoggerErr
@@ -39,10 +41,7 @@ type SrvSelfDestruct struct {
 	mu sync.Mutex
 }
 
-// Нужны для передачи нескольких значений (мапы) через контекст
-type myKeys interface{}
 
-var myKey myKeys = "myKey"
 
 func enableCors(w *http.ResponseWriter) {
     (*w).Header().Set("Access-Control-Allow-Origin", "*")
@@ -61,9 +60,16 @@ func HandleExpressionInternal(w http.ResponseWriter, r *http.Request) {
 	}()
 	logger.Println("Обработчик выражений получил запрос...")
 
-	vals := r.Context().Value(myKey).([2]myKeys)
-	username := vals[0].(string)
-	exp := vals[1].(string)
+	// Получаем значения из контекста
+	v, ok := middlewares.FromContext(r.Context())
+	if !ok {
+		loggerErr.Println("Ошибка получения имени пользователя из контекста:", err)
+		logger.Println("Внутренняя ошибка контекста, выражение не обрабатывается.")
+		http.Error(w, "ошибка валидации запроса", http.StatusInternalServerError)
+		return
+	}
+	username := v.Username
+	exp := v.Expression
 
 	// Генерируем uuid
 	uuidWithHyphen := uuid.New()
@@ -133,7 +139,7 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	db = shared.Db
+	db = shared.GetDb()
 
 	logger.Println("Сервер получил запрос на получение статуса выражения.")
 	// Метод должен быть GET
@@ -146,7 +152,14 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	var exists bool
 	id := r.URL.Query().Get("id")
 	// получаем значение из контекста запроса
-    username := r.Context().Value(myKey).(string)
+	v, ok := middlewares.FromContext(r.Context())
+	if !ok {
+		loggerErr.Println("Ошибка получения имени пользователя из контекста:", err)
+		logger.Println("Внутренняя ошибка контекста, выражение не обрабатывается.")
+		http.Error(w, "ошибка валидации запроса", http.StatusInternalServerError)
+		return
+	}
+	username := v.Username
 	var perms bool
 	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
 
@@ -205,96 +218,6 @@ func CheckExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// // Хендлер на endpoint получения списка выражений
-// func GetExpHandlerInternal(w http.ResponseWriter, r *http.Request) {
-// 	defer func() {
-// 		if rec := recover(); rec != nil {
-// 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-// 			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении статуса выражения:", rec)
-// 			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
-// 		}
-// 		logger.Println("Сервер обработал запрос на получение списка выражений.")
-// 	}()
-
-// 	logger.Println("Сервер получил запрос на получение списка выражений.")
-
-// 	// Метод должен быть GET
-// 	if r.Method != http.MethodGet {
-// 		logger.Println("Неправильный метод, выражение не обрабатывается.")
-// 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-// 		return
-// 	}
-
-// 	username := r.Header.Get("X-Username")
-// 	var perms bool
-// 	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
-// 	if err != nil {
-// 		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-// 			loggerErr.Println("Сервер: ошибка проверки пользователя в БД:", err)
-// 			http.Error(w, "Ошибка проверки пользователя", http.StatusInternalServerError)
-// 			return
-// 	}
-
-// 	var rows *pgx.Rows
-// 	if !perms {
-// 		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests WHERE username=$1", username)
-// 	} else {
-// 		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests", username)
-// 	}
-// 	if err != nil {
-// 		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-// 		loggerErr.Printf("Сервер: ошибка получения выражений из базы данных: %s", err)
-// 		http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	var (
-// 		exps     [][]string = [][]string{{"ID", "выражение", "рез-т", "агент"}} // Слайс с выражениями (и заголовком)
-// 		id       int
-// 		exp      string
-// 		finished bool
-// 		res      string
-// 		errors   bool
-// 		agent    int
-// 		failed   int // Сколько строк не смогли получить (ошибка от постгреса)
-// 	)
-// 	defer rows.Close()
-// 	for rows.Next() {
-// 		err := rows.Scan(&id, &exp, &finished, &res, &errors, &agent)
-// 		if err != nil {
-// 			logger.Println("Не смогли получить ряд из таблицы с выражениями, записываем, продолжаем получать ряды")
-// 			loggerErr.Printf("Сервер: ошибка получения выражения из базы данных: %s", err)
-// 			failed++
-// 			continue
-// 		}
-
-// 		if !finished {
-// 			if agent == -1 {
-// 				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", "в очереди"})
-// 			} else {
-// 				exps = append(exps, []string{fmt.Sprint(id), exp, "не подсчитано", fmt.Sprintf("агент %v", agent)})
-// 			}
-// 		} else {
-// 			if errors {
-// 				exps = append(exps, []string{fmt.Sprint(id), exp, "ошибка", fmt.Sprintf("агент %v", agent)})
-// 			} else {
-// 				exps = append(exps, []string{fmt.Sprint(id), exp, res, fmt.Sprintf("агент %v", agent)})
-// 			}
-// 		}
-// 	}
-// 	utils.PrintTable(exps, w) // Выводим таблицу в консоль
-// 	if failed != 0 {
-// 		fmt.Fprintln(w, "Не удалось получить", failed, "строк.")
-// 	}
-// 	err = rows.Err()
-// 	if err != nil {
-// 		logger.Println("Ошибка со строками.")
-// 		loggerErr.Printf("Сервер: ошибка получения строк из базы данных (но таблицу вывели): %s", err)
-// 		// http.Error(w, "Ошибка получения выражений из базы данных.", http.StatusInternalServerError
-// 		return
-// 	}
-// }
-
 // Хендлер на endpoint с значениями времени
 func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 	defer func() {
@@ -307,7 +230,14 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 
 	logger.Println("Сервер получил запрос на получение/изменение значений времени.")
 	// Проверяем пользователя на наличие прав изменения таймаута
-	username := r.Context().Value(myKey).(string)
+	v, ok := middlewares.FromContext(r.Context())
+	if !ok {
+		loggerErr.Println("Ошибка получения имени пользователя из контекста:", err)
+		logger.Println("Внутренняя ошибка контекста, выражение не обрабатывается.")
+		http.Error(w, "ошибка валидации запроса", http.StatusInternalServerError)
+		return
+	}
+	username := v.Username
 	var perms bool
 	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
 	if err != nil {
@@ -640,7 +570,7 @@ func (h *SrvSelfDestruct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Хендлер регистрации
 func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w)
-	db = shared.Db
+	db = shared.GetDb()
 	defer func() {
 		if rec := recover(); rec != nil {
 			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
@@ -753,7 +683,7 @@ func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	db = shared.Db
+	db = shared.GetDb()
 	logger.Println("Сервер получил запрос на вход пользователя.")
 	// Метод должен быть POST
 	if r.Method != http.MethodPost {

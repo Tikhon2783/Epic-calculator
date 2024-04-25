@@ -1,12 +1,13 @@
 package shared
 
 import (
+	"bufio"
 	"calculator/internal/config"
 	"encoding/json"
+	"io"
 	"log"
 	"os"
-	"io"
-	"bufio"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx"
@@ -18,8 +19,9 @@ var (
 	LoggerErr        *log.Logger = GetErrLogger()
 	LoggerHeartbeats *log.Logger = GetHeartbeatLogger()
 	LoggerQueue		 *log.Logger = GetQueueLogger()
-	Db               *pgx.ConnPool
+	db               *pgx.ConnPool
 	OpenFiles		 []*os.File = make([]*os.File, 0)
+	mu				 *sync.Mutex = &sync.Mutex{}
 )
 
 type Db_info struct {
@@ -29,6 +31,19 @@ type Db_info struct {
 	T_vars		bool
 	T_users		bool
 	T_timeout	bool
+}
+
+func GetDb() *pgx.ConnPool {
+	mu.Lock()
+	defer mu.Unlock()
+	v := db
+	return v
+}
+
+func SetDb(v *pgx.ConnPool) {
+	mu.Lock()
+	defer mu.Unlock()
+	db = v
 }
 
 func GetDBSTate() Db_info { // Возвращает JSON структуру из файла db_existance.json

@@ -80,7 +80,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 	}()
 	logger.Println("Получили внешний запрос на страницу с выражениями")
 
-	db = shared.Db
+	db = shared.GetDb()
 	// Получаем имя пользователя через jwt токен из cookie файлов
 	cookie, err := r.Cookie("token")
 	if err != nil {
@@ -114,9 +114,9 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 
 	var rows *pgx.Rows
 	if !perms {
-		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests WHERE username=$1", username)
+		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess, username FROM requests WHERE username=$1", username)
 	} else {
-		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess FROM requests")
+		rows, err = db.Query("SELECT request_id, expression, calculated, result, errors, agent_proccess, username FROM requests")
 	}
 	if err != nil {
 		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
@@ -134,10 +134,11 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 		errors   bool
 		agent    int
 		failed   int // Сколько строк не смогли получить (ошибка от постгреса)
+		sender	 string
 	)
 	defer rows.Close()
 	for rows.Next() {
-		err := rows.Scan(&id, &exp, &finished, &res, &errors, &agent)
+		err := rows.Scan(&id, &exp, &finished, &res, &errors, &agent, &sender)
 		if err != nil {
 			logger.Println("Не смогли получить ряд из таблицы с выражениями, записываем, продолжаем получать ряды")
 			loggerErr.Printf("Сервер: ошибка получения выражения из базы данных: %s", err)
@@ -152,7 +153,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 					Exp: exp,
 					Result: "В очереди",
 					Agent: agent,
-					Username: username,
+					Username: sender,
 				})
 			} else {
 				exps = append(exps, expItem{
@@ -160,7 +161,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 					Exp: exp,
 					Result: "Еще считается",
 					Agent: agent,
-					Username: username,
+					Username: sender,
 				})
 			}
 		} else {
@@ -170,7 +171,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 					Exp: exp,
 					Result: "Деление на ноль",
 					Agent: agent,
-					Username: username,
+					Username: sender,
 				})
 			} else {
 				exps = append(exps, expItem{
@@ -178,7 +179,7 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 					Exp: exp,
 					Result: res,
 					Agent: agent,
-					Username: username,
+					Username: sender,
 				})
 			}
 		}

@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,10 +12,6 @@ import (
 	"calculator/internal"
 	"calculator/internal/errors"
 	"calculator/internal/jwt-stuff"
-
-	"github.com/jackc/pgx"
-	_ "github.com/jackc/pgx/v5"
-	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
 )
 
 var (
@@ -22,16 +19,35 @@ var (
 	logger            *log.Logger = shared.Logger
 	loggerErr         *log.Logger = shared.LoggerErr
 	Srv               *http.Server
-	db                *pgx.ConnPool  = shared.Db
 )
 
-// Нужны для передачи нескольких значений (мапы) через контекст
-type myKeys interface{}
 
-var (
-	myKey myKeys = "myKey"
-	myUsernameKey myKeys = "username"
-)
+// Data is the type of value stored in the Contexts.
+type Data struct {
+	Username string
+	Id string
+	Expression string
+}
+
+// key is an unexported type for keys defined in this package.
+// This prevents collisions with keys defined in other packages.
+type key int
+
+// dataKey is the key for Data values in Contexts. It is
+// unexported; clients use NewContext and FromContext
+// instead of using this key directly.
+var dataKey key
+
+// NewContext returns a new Context that carries value d.
+func NewContext(ctx context.Context, d *Data) context.Context {
+    return context.WithValue(ctx, dataKey, d)
+}
+
+// FromContext returns the Data value stored in ctx, if any.
+func FromContext(ctx context.Context) (*Data, bool) {
+    u, ok := ctx.Value(dataKey).(*Data)
+    return u, ok
+}
 
 // Проверка выражения на валидность
 func ValidityMiddleware(next http.Handler) http.Handler {
@@ -39,7 +55,7 @@ func ValidityMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				logger.Println("Внутренняя ошибка, выражение не обрабатывается.")
-				loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработке выражения.")
+				loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработке выражения:", rec)
 				http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 			}
 		}()
@@ -63,6 +79,7 @@ func ValidityMiddleware(next http.Handler) http.Handler {
 		// Проверяем выражение на валидность
 		exp := r.PostForm.Get("expression")
 		exp = strings.ReplaceAll(exp, " ", "") // Убираем пробелы
+		log.Printf("Получили выражение: '%s'", exp)
 
 		// Проверяем на постановку знаков
 		replacer := strings.NewReplacer(
@@ -94,8 +111,14 @@ func ValidityMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Передаем обработчику ID и выражение через контекст
-		username := r.Context().Value(myKey).(string)
-		ctx := context.WithValue(r.Context(), myKey, [2]myKeys{username, exp})
+		v, ok := FromContext(r.Context())
+		if !ok {
+			loggerErr.Println("Ошибка получения имени пользователя из контекста:", err)
+			logger.Println("Внутренняя ошибка контекста, выражение не обрабатывается.")
+			http.Error(w, "ошибка валидации запроса", http.StatusInternalServerError)
+			return
+		}
+		ctx := NewContext(r.Context(), &Data{Username: v.Username, Expression: exp})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -106,7 +129,7 @@ func ExternalAuthorizationMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-				loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработке выражения.")
+				loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработке выражения:", rec)
 				http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 			}
 		}()
@@ -144,7 +167,7 @@ func ExternalAuthorizationMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Передаем обработчику имя пользователя через контекст
-		ctx := context.WithValue(r.Context(), myUsernameKey, username)
+		ctx := NewContext(r.Context(), &Data{Username: username})
 		logger.Printf("Пользователь %s авторизирован.", username)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -156,11 +179,12 @@ func InternalAuthorizationMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
-				loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработке выражения.")
+				loggerErr.Println("Сервер: непредвиденная ПАНИКА при обработке выражения:", rec)
 				http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
 			}
 		}()
 
+		fmt.Println(1)
 		logger.Println("Получили запрос на внутренний обработчик, проверяем токен...")
 
 		// Получаем jwt токен из cookie файлов
@@ -195,7 +219,7 @@ func InternalAuthorizationMiddleware(next http.Handler) http.Handler {
 
 		// Передаем обработчику имя пользователя через контекст
 		logger.Printf("Запрос пользователя %s авторизирован.", username)
-		ctx := context.WithValue(r.Context(), myUsernameKey, username)
+		ctx := NewContext(r.Context(), &Data{Username: username})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

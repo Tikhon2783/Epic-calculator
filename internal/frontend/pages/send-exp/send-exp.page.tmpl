@@ -63,13 +63,14 @@ function submitSendForm(event) {
 
     console.log('sending calc request...');
 
-    const key = document.getElementById('expression').value;
-    if (!key) {
+    const exp = document.getElementById('expression').value;
+    if (!exp) {
         alert('Заполните поле с выражением');
         return;
     }
     const formData = new URLSearchParams();
-    formData.append('id', key);
+    formData.append('expression', exp);
+    console.log('exp', exp, 'data', formData)
 
     fetch('/calculator/internal/sendexpression', {
         method: 'POST',

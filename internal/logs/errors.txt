@@ -1,104 +1,175 @@
 
 НОВАЯ СЕССИЯ
-01:12:14 startup.go:289: не смогли добавить время в БД (summation): ОШИБКА: ошибка синтаксиса (примерное положение: "%") (SQLSTATE 42601)
-
-НОВАЯ СЕССИЯ
-01:49:10 internal.go:416: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: runtime error: invalid memory address or nil pointer dereference
-01:51:10 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
 
 НОВАЯ СЕССИЯ
-01:54:13 internal.go:423: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: ошибка синтаксиса (примерное положение: ";") (SQLSTATE 42601)
-01:55:59 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-01:59:31 server.go:104: HTTP сервер накрылся: http: Server closed
+00:55:12 agent.go:105: ???	 
+00:55:13 agent.go:105: ???	 
+00:55:14 agent.go:105: ???	 
+00:55:15 agent.go:105: ???	 
+00:55:16 agent.go:105: ???	 
+00:55:17 agent.go:105: ???	 
+00:55:18 agent.go:105: ???	 
+00:55:19 agent.go:105: ???	 
+00:55:20 agent.go:105: ???	 
+00:55:21 agent.go:105: ???	 
+00:55:22 agent.go:105: ???	 
+00:55:23 agent.go:105: ???	 
+00:55:24 agent.go:105: ???	 
+00:55:25 agent.go:105: ???	 
+00:55:26 agent.go:105: ???	 
+00:55:27 agent.go:105: ???	 
+00:55:28 agent.go:105: ???	 
+00:55:29 agent.go:105: ???	 
+00:55:30 agent.go:105: ???	 
+00:55:31 agent.go:105: ???	 
+00:55:32 agent.go:105: ???	 
+00:55:33 agent.go:105: ???	 
+00:55:34 agent.go:105: ???	 
+00:55:35 server.go:104: HTTP сервер накрылся: http: Server closed
+00:55:35 agent.go:105: ???	 
 
 НОВАЯ СЕССИЯ
-02:02:10 server.go:104: HTTP сервер накрылся: http: Server closed
+00:57:41 internal.go:131: Сервер: непредвиденная ПАНИКА при получении статуса выражения: interface conversion: interface {} is nil, not string
+00:57:43 internal.go:131: Сервер: непредвиденная ПАНИКА при получении статуса выражения: interface conversion: interface {} is nil, not string
+00:59:27 middlewares.go:42: Сервер: непредвиденная ПАНИКА при обработке выражения.
+01:00:11 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-02:08:14 server.go:104: HTTP сервер накрылся: http: Server closed
+01:01:23 middlewares.go:42: Сервер: непредвиденная ПАНИКА при обработке выражения: runtime error: index out of range [0] with length 0
+01:01:48 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-02:46:20 internal.go:503: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
-02:46:20 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
-02:46:35 server.go:104: HTTP сервер накрылся: http: Server closed
+01:03:44 middlewares.go:37: Сервер: непредвиденная ПАНИКА при обработке выражения: runtime error: index out of range [0] with length 0
+01:03:51 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-06:49:11 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+01:07:26 middlewares.go:37: Сервер: непредвиденная ПАНИКА при обработке выражения: interface conversion: interface {} is nil, not string
+01:10:54 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-06:49:51 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+01:13:00 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-06:52:19 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+01:14:53 middlewares.go:37: Сервер: непредвиденная ПАНИКА при обработке выражения: interface conversion: interface {} is nil, not string
+01:20:10 internal.go:131: Сервер: непредвиденная ПАНИКА при получении статуса выражения: interface conversion: interface {} is nil, not string
+01:22:32 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:09:23 internal.go:503: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
-07:09:23 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: подготовленный оператор "fill_times" уже существует (SQLSTATE 42P05)
-07:09:41 server.go:104: HTTP сервер накрылся: http: Server closed
+01:24:04 internal.go:131: Сервер: непредвиденная ПАНИКА при получении статуса выражения: interface conversion: interface {} is nil, not string
+01:24:26 middlewares.go:37: Сервер: непредвиденная ПАНИКА при обработке выражения: interface conversion: interface {} is nil, not string
+01:24:55 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:19:46 server.go:104: HTTP сервер накрылся: http: Server closed
+01:31:02 middlewares.go:42: Сервер: непредвиденная ПАНИКА при обработке выражения: interface conversion: interface {} is nil, not string
+01:35:28 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:24:59 server.go:104: HTTP сервер накрылся: http: Server closed
+01:38:10 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+01:38:27 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:25:54 internal.go:489: ОШИБКА: схема "jeremy" уже существует (SQLSTATE 42P06)
-07:25:54 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: схема "jeremy" уже существует (SQLSTATE 42P06)
-07:26:53 internal.go:489: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
-07:26:53 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
-07:28:21 internal.go:489: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
-07:28:21 internal.go:424: Сервер: непредвиденная ПАНИКА при обработки запроса на регистрацию пользователя: ОШИБКА: схема "dellconnagher" уже существует (SQLSTATE 42P06)
-07:29:33 server.go:104: HTTP сервер накрылся: http: Server closed
+01:40:22 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+01:40:26 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:30:04 server.go:104: HTTP сервер накрылся: http: Server closed
+02:04:08 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+02:04:44 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+02:04:47 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+02:09:49 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:33:36 server.go:104: HTTP сервер накрылся: http: Server closed
+02:12:20 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+02:13:29 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+02:14:32 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:35:11 server.go:104: HTTP сервер накрылся: http: Server closed
+02:16:09 internal.go:58: Сервер: неожиданная ПАНИКА при отправке выражения: interface conversion: interface {} is [2]middlewares.myKeys, not [2]handlers.myKeys
+02:16:17 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:40:16 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:40:44 internal.go:588: Ошибка генерации токена: key is of invalid type: HMAC sign expects []byte
-07:41:23 server.go:104: HTTP сервер накрылся: http: Server closed
+08:39:07 orchestrator.go:328: Паника: Scan received wrong number of arguments, got 2 but expected 1
 
 НОВАЯ СЕССИЯ
-07:51:54 server.go:104: HTTP сервер накрылся: http: Server closed
+08:41:25 orchestrator.go:328: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:41:25 orchestrator.go:340: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:43:24 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:53:13 internal.go:528: Сервер: непредвиденная ПАНИКА при обработки запроса на вход пользователя: runtime error: invalid memory address or nil pointer dereference
-07:54:24 internal.go:528: Сервер: непредвиденная ПАНИКА при обработки запроса на вход пользователя: runtime error: invalid memory address or nil pointer dereference
-07:55:11 server.go:104: HTTP сервер накрылся: http: Server closed
+08:45:44 orchestrator.go:328: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:45:44 orchestrator.go:340: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:46:27 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-07:58:17 server.go:104: HTTP сервер накрылся: http: Server closed
+08:46:36 orchestrator.go:328: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:46:36 orchestrator.go:340: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:46:41 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-08:06:16 server.go:104: HTTP сервер накрылся: http: Server closed
+08:47:39 orchestrator.go:330: Паника: can't scan into dest[0]: cannot decode &pgtype.Record{Fields:[]pgtype.Value{(*pgtype.BPChar)(0xc000008048), (*pgtype.Varchar)(0xc000008060)}, Status:0x2} into *string
+08:47:39 orchestrator.go:343: Паника: can't scan into dest[0]: cannot decode &pgtype.Record{Fields:[]pgtype.Value{(*pgtype.BPChar)(0xc000008048), (*pgtype.Varchar)(0xc000008060)}, Status:0x2} into *string
+08:47:45 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-08:13:29 server.go:104: HTTP сервер накрылся: http: Server closed
+08:50:21 orchestrator.go:328: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:50:21 orchestrator.go:340: Паника: Scan received wrong number of arguments, got 2 but expected 1
+08:50:25 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-08:17:43 server.go:104: HTTP сервер накрылся: http: Server closed
+08:51:49 orchestrator.go:328: Паника: Scan received wrong number of arguments, got 1 but expected 2
+08:51:49 orchestrator.go:340: Паника: Scan received wrong number of arguments, got 1 but expected 2
+08:51:53 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-08:24:40 server.go:104: HTTP сервер накрылся: http: Server closed
+08:52:45 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
 
 НОВАЯ СЕССИЯ
-08:31:46 server.go:104: HTTP сервер накрылся: http: Server closed
 
 НОВАЯ СЕССИЯ
-08:32:35 server.go:104: HTTP сервер накрылся: http: Server closed
+08:57:20 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
 
 НОВАЯ СЕССИЯ
-08:39:13 server.go:104: HTTP сервер накрылся: http: Server closed
+09:00:02 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
+
+НОВАЯ СЕССИЯ
+09:06:17 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
+
+НОВАЯ СЕССИЯ
+09:06:44 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
+
+НОВАЯ СЕССИЯ
+09:07:22 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
+
+НОВАЯ СЕССИЯ
+09:12:23 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
+
+НОВАЯ СЕССИЯ
+09:13:51 orchestrator.go:273: Scan received wrong number of arguments, got 2 but expected 1
+
+НОВАЯ СЕССИЯ
+09:14:35 orchestrator.go:273: can't scan into dest[0]: cannot decode &pgtype.Record{Fields:[]pgtype.Value{(*pgtype.Varchar)(0xc000117800), (*pgtype.Int4)(0xc00010d280)}, Status:0x2} into *string
+
+НОВАЯ СЕССИЯ
+09:19:59 orchestrator.go:273: can't scan into dest[1]: cannot assign 500 into int
+
+НОВАЯ СЕССИЯ
+09:20:30 orchestrator.go:273: can't scan into dest[1]: cannot assign 500 into int
+
+НОВАЯ СЕССИЯ
+09:21:48 agent.go:117: Перехватили панику агента 2: ОШИБКА: ошибка синтаксиса (примерное положение: "dbPut") (SQLSTATE 42601)
+— Отключаем агента 2...
+09:23:16 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+
+НОВАЯ СЕССИЯ
+09:30:07 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+09:30:35 agent.go:285: Агент 2: в выражении присутствует деление на ноль.
+09:30:57 server.go:104: HTTP сервер накрылся: http: Server closed

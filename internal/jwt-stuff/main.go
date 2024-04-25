@@ -39,7 +39,7 @@ func GenerateToken(username string) (*http.Cookie, error) {
 		Expires: expirationTime,
 		// HttpOnly: true,
 		Path: "/",
-		SameSite: http.SameSiteNoneMode,
+		// SameSite: http.SameSiteNoneMode,
 	}, nil
 }
 

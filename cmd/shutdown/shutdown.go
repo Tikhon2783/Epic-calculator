@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	db           *pgx.ConnPool = shared.Db
+	db           *pgx.ConnPool = shared.GetDb()
 	db_existance []byte
 	logger       *log.Logger = shared.Logger
 	loggerErr    *log.Logger = shared.LoggerErr

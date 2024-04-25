@@ -18,12 +18,12 @@ import (
 
 var (
 	ServerExitChannel chan os.Signal = make(chan os.Signal, 1)
-	db                *pgx.ConnPool  = shared.Db
+	db                *pgx.ConnPool  = shared.GetDb()
 	err               error
 	logger            *log.Logger = shared.Logger
 	loggerErr         *log.Logger = shared.LoggerErr
 	loggerHB          *log.Logger = shared.LoggerHeartbeats
-	mu                *sync.RWMutex
+	mu                *sync.RWMutex = &sync.RWMutex{}
 )
 
 // Структура для мониторинга агентов (менеджер агентов)
@@ -31,7 +31,7 @@ type AgentsManager struct {
 	Agents [vars.N_agents + 1]int	// Кол-во живых агентов (0 - мертв, 1 - свободен, 2 - занят)
 	HbTime     	  map[int]time.Time	// Мапа с временем последних хартбитов
 	HbTimeout    map[int]time.Duration	// Мапа с временем таймаутов для каждого агента
-	TaskIds      *Queue					// Очередь не принятых агентами выражений
+	TaskIds      *Queue			// Очередь не принятых агентами выражений
 	ToKill		 int
 }
 
@@ -52,6 +52,7 @@ func (q *Queue) Find() (id string, expression string, username string, found boo
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	db = shared.GetDb()
 	for id, exp := range q.exps {
 		var username string
 		err = db.QueryRow("SELECT (username) FROM requests WHERE request_id=$1", id).Scan(&username)
@@ -88,7 +89,10 @@ func NewAgentsManager() *AgentsManager {
 		Agents:       [vars.N_agents + 1]int{},
 		HbTime:       make(map[int]time.Time),
 		HbTimeout:    make(map[int]time.Duration),
-		TaskIds:      &Queue{},
+		TaskIds:      &Queue{
+			mu: sync.Mutex{},
+			exps: make(map[string]string),
+		},
 	}
 }
 
@@ -100,14 +104,14 @@ func (m *AgentsManager) RegisterAgent(agentID int) error {
 
 	m.Agents[agentID] = 1
 	m.HbTime[agentID] = time.Now()
-	m.HbTimeout[agentID] = getTimes()
+	m.HbTimeout[agentID] = GetTimeout()
 	return nil
 }
 
 // Хендлер на принятие выражения
 func (m *AgentsManager) HandleExpression(id, exp string) {
 	m.TaskIds.Append(id, exp)
-	log.Print("Менеджер агентов поставил выражение в очередь")
+	logger.Printf("Менеджер агентов поставил выражение с id '%s' - '%s' в очередь", id, exp)
 }
 
 func (m *AgentsManager) GiveExpression() (id string, exp string, username string, ok bool) {
@@ -121,6 +125,7 @@ func (m *AgentsManager) TakeExpression(id string, agentID int) bool {
 	if !ok {
 		return false
 	}
+	db = shared.GetDb()
 	_, err = db.Exec("orchestratorAssign", id, agentID)
 	if err != nil {
 		loggerErr.Println("Ошибка назначения выражению агента. "+
@@ -206,7 +211,8 @@ func (m *AgentsManager) RegisterHeartbeat(i int) {
 }
 
 // Функция для получения времени операций из БД
-func getTimes() time.Duration {
+func GetTimeout() time.Duration {
+	db = shared.GetDb()
 	var timeout int
 	err = db.QueryRow("SELECT time FROM agent_timeout").Scan(&timeout)
 	if err != nil {

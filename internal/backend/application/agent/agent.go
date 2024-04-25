@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	db        *pgx.ConnPool = shared.Db
+	db        *pgx.ConnPool = shared.GetDb()
 	err       error
 	logger    *log.Logger = shared.Logger
 	loggerErr *log.Logger = shared.LoggerErr
@@ -60,7 +60,7 @@ func Agent(a *AgentComm) {
 
 	logger.Printf("Подключился агент %v.\n", a.N)
 	fmt.Printf("Агент %v передает привет!\n", a.N) // TODO: добавить имена
-	db = shared.Db
+	db = shared.GetDb()
 	wg := sync.WaitGroup{}
 	
 	// Устанавливаем gRPC соединение
@@ -101,7 +101,7 @@ func Agent(a *AgentComm) {
 					loggerHB.Printf("Агент %v - смерть.\n", a.N)
 					logger.Printf("Агент %v: запланированная смерть, отключаем агента...", a.N)
 					return
-				} else {
+				} else if resp.Error != "" {
 					loggerErr.Println("???\t", resp.Error)
 				}
 			case <-deathChannel:
@@ -128,7 +128,6 @@ func Agent(a *AgentComm) {
 			
 			// Переменные ниже понадобятся позже - иначе их не видит второй селект
 			chRes := make(chan [4]float32) // Канал для получения значений от вычислителей
-			timesNow := getTimes(a.N)
 			// fmt.Println(a.N, "agent sum:", timesNow.Sum)
 			expParts := make(map[[3]int]string) // Мапа для мониторинга статусов частей выражения
 			// ^ ключ - координаты, значение - делитель(1), множитель (2) или сложение (-1)
@@ -140,7 +139,7 @@ func Agent(a *AgentComm) {
 				activeWorkers int     // Кол-во занятых вычислителей
 				taskId        string  // ID выражения
 				task          string  // Само выражение
-				times *Times		  // Время на выполнение операций
+				times	*Times = &Times{}	// Время на выполнение операций
 			)
 
 			// Фаза 1: агент свободен
@@ -211,7 +210,7 @@ func Agent(a *AgentComm) {
 						newParts[i][j-1] = "X"
 						newParts[i][j] = "X"
 						// Получаем значение для мапы статусов и запускаем вычислитель
-						val, err := calcMult(v1, v2, pos, chRes, timesNow)
+						val, err := calcMult(v1, v2, pos, chRes, *times)
 						if err != nil {
 							panic(err)
 						}
@@ -246,7 +245,7 @@ func Agent(a *AgentComm) {
 				comps[i-1] = "X"
 				comps[i] = "X"
 				// Запускаем вычислитель
-				err := calcSum(v1, v2, pos, chRes, timesNow)
+				err := calcSum(v1, v2, pos, chRes, *times)
 				if err != nil {
 					panic(err)
 				}
@@ -283,7 +282,6 @@ func Agent(a *AgentComm) {
 				case num := <-chRes: // Получили значение от вычислителя
 					logger.Printf("Агент %v получил значение: ", a.N)
 					if num == [4]float32{-1, -1, -1, -1} {
-						db.Exec("dbRes", a.N, "0")
 						loggerErr.Printf("Агент %v: в выражении присутствует деление на ноль.\n", a.N)
 						logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 						fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
@@ -311,7 +309,6 @@ func Agent(a *AgentComm) {
 							newParts[numPos[0]][numPos[2]] = fmt.Sprint("/", num[3])
 						} else {
 							loggerErr.Println("- ERROR - Got unknown type! - ERROR -")
-							db.Exec("dbRes", a.N, "0")
 							loggerErr.Printf("Агент %v: в выражении присутствует деление на ноль.\n", a.N)
 							logger.Printf("Агент %v посчитал значение выражения с ID %v.\n", a.N, taskId)
 							fmt.Println(taskId, ":", task, "— ошибка: деление на ноль.")
@@ -379,7 +376,7 @@ func Agent(a *AgentComm) {
 									logger.Printf("Агент %v: Вычисление произведения уже производится, пропускаем итерацию %v.\n", a.N, j)
 									continue
 								}
-								val, err := calcMult(v1, v2, pos, chRes, timesNow)
+								val, err := calcMult(v1, v2, pos, chRes, *times)
 								if err != nil {
 									panic(err)
 								}
@@ -437,7 +434,7 @@ func Agent(a *AgentComm) {
 							logger.Printf("Агент %v: Вычисление суммы уже производится, пропускаем итерацию %v.\n", a.N, i)
 							continue
 						}
-						err := calcSum(v1, v2, pos, chRes, timesNow)
+						err := calcSum(v1, v2, pos, chRes, *times)
 						if err != nil {
 							panic(err)
 						}
@@ -452,7 +449,6 @@ func Agent(a *AgentComm) {
 
 					// Проверяем, готов ли ответ
 					if val := countReal(comps); val != "" && activeWorkers == 0 {
-						_, err = db.Exec("dbRes", a.N, val)
 						if err != nil {
 							panic(err)
 						}
@@ -633,10 +629,10 @@ func proccessExp(_ [][]string, taskId string, N int, task string) ([][]string, e
 	logger.Printf("Агент %v обработал выражение: [ %s ] - ID: %v\n", N, strings.Join(exp, " ' "), taskId)
 
 	// Записываем обработанное выражение в БД
-	_, err = db.Exec("dbPut", taskId, N, task, strings.Join(exp, " ' "))
-	if err != nil {
-		return [][]string{}, err
-	}
+	// _, err = db.Exec("dbPut", taskId, N, task, strings.Join(exp, " ' "))
+	// if err != nil {
+	// 	return [][]string{}, err
+	// }
 	logger.Printf("Агент %v записал в БД части выражения с ID %v\n", N, taskId)
 	// fmt.Println(strings.Join(exp, " ' "))
 	return newParts, nil

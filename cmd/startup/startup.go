@@ -6,15 +6,15 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
 	"calculator/internal"
+	"calculator/internal/backend/application"
 	"calculator/internal/config"
 	"calculator/internal/frontend/server"
 	"calculator/internal/frontend/server/utils"
-	// "calculator/internal/backend/application"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	db           *pgx.ConnPool = shared.Db
+	db           *pgx.ConnPool = shared.GetDb()
 	err          error
 	db_existance []byte
 	logger       *log.Logger = shared.Logger
@@ -56,12 +56,12 @@ func main() {
 		logger.Printf("Подключились к %s.\n", vars.DBName)
 	}
 
-	shared.Db = db
+	shared.SetDb(db)
 	// Запускаем сервер оркестратора — передаем ему управление
 	logger.Println("Передаем управление оркестратору...")
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt)
-	// go orchestrator.Launch() // Горутина запуска состовляющих калькулятора
+	go application.Launch() // Горутина запуска состовляющих калькулятора
 	serverExitChannel, orchestratorReviveChannel := frontserver.LaunchServer()
 
 	// Ждем сигнала об остановке программы
@@ -238,7 +238,28 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		}()
 	}
 
-	if !db_info.T_vars {
+	if !db_info.T_timeout {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err = db.Exec(
+				`CREATE TABLE IF NOT EXISTS agent_timeout (time integer NOT NULL, field BOOL DEFAULT TRUE);`,
+			)
+			if err != nil {
+				panic(err)
+			}
+			_, err = db.Exec("INSERT INTO agent_timeout (time) VALUES ($1)", vars.T_agentTimeout/1_000_000)
+			if err != nil {
+				panic(err)
+			}
+			db_info.T_timeout = true
+			logger.Println("Создали таблицу с таймаутом.")
+			}()
+		}
+		
+		wg.Wait()
+		
+		if !db_info.T_vars {
 		// Записываем пользователей с правами
 		for _, u := range vars.Admins {
 			wg.Add(1)
@@ -298,28 +319,8 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 				wg.Done()
 			}(u)
 		}
+		wg.Wait()
 	}
-
-	if db_info.T_timeout {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err = db.Exec(
-				`CREATE TABLE IF NOT EXISTS agent_timeout (time integer NOT NULL, field BOOL DEFAULT TRUE);`,
-			)
-			if err != nil {
-				panic(err)
-			}
-			_, err = db.Exec("INSERT INTO agent_timeout (time) VALUES ($1)", vars.T_agentTimeout/1_000_000)
-			if err != nil {
-				panic(err)
-			}
-			db_info.T_timeout = true
-			logger.Println("Создали таблицу с таймаутом.")
-		}()
-	}
-
-	wg.Wait()
 
 	// Обновляем данные о состоянии БД
 	db_existance, err = json.MarshalIndent(db_info, "", "\t")
