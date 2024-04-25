@@ -1,0 +1,57 @@
+{{template "base" .}}
+ 
+{{define "title"}}Values page{{end}}
+ 
+{{define "main"}}
+<h2>Параметры</h2>
+<form id="sendValsForm">
+    <label for="summation">Сложение:</label>
+    <input type="text" id="summation" name="summation" placeholder={{ .SumDefault }} value={{ .SumDefault }}><br><br>
+
+    <label for="summation">Вычитание:</label>
+    <input type="text" id="substraction" name="substraction" placeholder={{ .SubDefault }} value={{ .SubDefault }}><br><br>
+
+    <label for="summation">Умножение:</label>
+    <input type="text" id="multiplication" name="multiplication" placeholder={{ .MulDefault }} value={{ .MulDefault }}><br><br>
+
+    <label for="summation">Деление:</label>
+    <input type="text" id="division" name="division" placeholder={{ .DivDefault }} value={{ .DivDefault }}><br><br>
+
+    <label for="summation">Таймаут:</label>
+    <input type="text" id="timeoutAgent" name="timeoutAgent" placeholder={{ .TimeoutDefault }} value={{ .TimeoutDefault }} {{ .AgentPerms }}><br><br>
+
+    <button type="submit" id="sendVals-btn" onclick="submitValsForm(event)">Сохранить</button>
+</form>
+{{end}}
+
+{{define "custom"}}
+function submitValsForm(event) {
+    event.preventDefault();
+
+    console.log('sending vals request...');
+
+    const exp = document.getElementById('expression').value;
+
+    const formData = new URLSearchParams();
+    formData.append('expression', exp);
+    console.log('exp', exp, 'data', formData)
+
+    fetch('/calculator/internal/sendexpression', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if(response.ok) {
+            console.log('Request successful');
+            alert('Выражение отправлено');
+        } else {
+            console.error('Request failed');
+            alert('Ошибка, code', response.status)
+        }
+    })
+    .then(data => {
+        alert(data);
+    })
+    .catch(error => console.error('Error:', error));
+}
+{{end}}

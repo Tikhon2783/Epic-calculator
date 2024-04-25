@@ -228,7 +228,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	logger.Println("Сервер получил запрос на получение/изменение значений времени.")
+	logger.Println("Сервер получил запрос на изменение значений времени.")
 	// Проверяем пользователя на наличие прав изменения таймаута
 	v, ok := middlewares.FromContext(r.Context())
 	if !ok {

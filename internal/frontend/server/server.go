@@ -44,30 +44,21 @@ func LaunchServer() (chan os.Signal, chan os.Signal) {
 		"/calculator/internal/checkexpression",
 		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.CheckExpHandlerInternal)),
 	)
-	// // Получить список всех выражений
-	// mux.Handle(
-	// 	"/calculator/internal/getexpressions",
-	// 	middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.GetExpHandlerInternal)),
-	// )
 	// Получение списка доступных операций со временем их выполения
 	mux.Handle(
 		"/calculator/internal/values",
 		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.TimeValuesInternal)),
 	)
-	// // Получение списка агентов и оркестратора
-	// mux.Handle(
-	// 	"/calculator/internal/monitor",
-	// 	middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.MonitorHandlerInternal)),
-	// )
-	mux.HandleFunc("/calculator/internal/signin", handlers.LogInHandlerInternal)		// Аутентификация пользователя
-	mux.HandleFunc("/calculator/internal/register", handlers.RegisterHandlerInternal)	// Регистрация пользователя
-	mux.HandleFunc("/calculator/internal/logout", handlers.LogOutHandlerInternal)		// Выход из аккаунта
+	// Аутентификация пользователя
+	mux.HandleFunc("/calculator/internal/signin", handlers.LogInHandlerInternal)
+	// Регистрация пользователя
+	mux.HandleFunc("/calculator/internal/register", handlers.RegisterHandlerInternal)
+	// Выход из аккаунта
+	mux.HandleFunc("/calculator/internal/logout", handlers.LogOutHandlerInternal)
 
 	// Внешние endpoint-ы
 	mux.HandleFunc("/calculator/home", handlers.HomeHandler)
-	// // Отправить выражение
-	// mux.Handle("/calculator/send", middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.SendHandlerExternal)))
-	// Получить список всех выражений
+	// Страница с выражениями
 	mux.Handle(
 		"/calculator/check",
 		middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.GetExpHandlerExternal)),
@@ -77,7 +68,7 @@ func LaunchServer() (chan os.Signal, chan os.Signal) {
 		"/calculator/values",
 		middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.TimeValuesHandlerExternal)),
 	)
-	// Получение списка агентов и оркестратора
+	// Получение списка состояний агентов и оркестратора
 	mux.Handle(
 		"/calculator/monitor",
 		middlewares.ExternalAuthorizationMiddleware(http.HandlerFunc(handlers.MonitorHandlerExternal)),

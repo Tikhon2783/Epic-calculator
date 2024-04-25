@@ -132,7 +132,6 @@ func GetHeartbeatLogger() *log.Logger {
 	case 0:
 		return log.New(os.Stdout, "PULSE ", vars.LoggerFlagsPings)
 	case 1:
-		// f, err := os.OpenFile("logs/heartbeats.txt", os.O_APPEND | os.O_WRONLY, 0600)
 		f, err := os.Create("internal/logs/heartbeats.txt")
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера пингов, их логи записаны не будут:", err)
@@ -157,7 +156,6 @@ func GetQueueLogger() *log.Logger {
 	case 0:
 		return log.New(os.Stdout, "", vars.LoggerFlagsQueue)
 	case 1:
-		// f, err := os.OpenFile("logs/heartbeats.txt", os.O_APPEND | os.O_WRONLY, 0600)
 		f, err := os.Create("internal/logs/queue.txt")
 		if err != nil {
 			log.Println("Не смогли открыть файл для логгера обращений агентов, их логи записаны не будут:", err)

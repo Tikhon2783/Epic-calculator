@@ -8,6 +8,8 @@ import (
 
 	"calculator/internal"
 	"calculator/internal/jwt-stuff"
+	"calculator/internal/frontend/server/middlewares"
+	"calculator/internal/backend/application/orchestrator"
 
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
@@ -25,6 +27,15 @@ type expItem struct {
 	Result string
 	Agent int
 	Username string
+}
+
+type valsData struct {
+	SumDefault	string
+	SubDefault	string
+	MulDefault	string
+	DivDefault	string
+	TimeoutDefault	string
+	AgentPerms	string
 }
 
 func AuthHandlerExternal(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +237,46 @@ func GetExpHandlerExternal(w http.ResponseWriter, r *http.Request) {
 }
 
 func TimeValuesHandlerExternal(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении параметров:", rec)
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
+	logger.Println("Сервер получил запрос на страницу параметров.")
+	
+	// Проверяем пользователя на наличие прав изменения таймаута
+	v, ok := middlewares.FromContext(r.Context())
+	if !ok {
+		loggerErr.Println("Ошибка получения имени пользователя из контекста:", err)
+		logger.Println("Внутренняя ошибка контекста, выражение не обрабатывается.")
+		http.Error(w, "ошибка валидации запроса", http.StatusInternalServerError)
+		return
+	}
+	username := v.Username
+	var perms bool
+	err = db.QueryRow("SELECT perms FROM users WHERE username=$1", username).Scan(&perms)
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: ошибка проверки пользователя в БД:", err)
+			http.Error(w, "Ошибка проверки пользователя", http.StatusInternalServerError)
+			return
+	}
+
+	// Получаем значения и возвращаем
+	t := orchestrator.GetTimes(username)
+	data := valsData{
+		SumDefault: t.Sum.String(),
+		SubDefault: t.Sub.String(),
+		MulDefault: t.Mult.String(),
+		DivDefault: t.Div.String(),
+		TimeoutDefault: t.AgentTimeout.String(),
+		AgentPerms: map[bool]string{true: "", false: "readonly"}[perms],
+	}
+	w.WriteHeader(http.StatusOK)
+
+
 	files := []string{
 		"internal/frontend/pages/values/values.page.tmpl",
 		"internal/frontend/pages/base.layout.tmpl",
@@ -239,7 +290,7 @@ func TimeValuesHandlerExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ts.Execute(w, nil)
+	err = ts.Execute(w, data)
 	if err != nil {
 		log.Println(err.Error())
 		http.Error(w, "Internal Server Error", 500)

@@ -173,3 +173,9 @@
 НОВАЯ СЕССИЯ
 09:30:35 agent.go:285: Агент 2: в выражении присутствует деление на ноль.
 09:30:57 server.go:104: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+02:00:22 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+
+НОВАЯ СЕССИЯ
+02:08:32 server.go:95: HTTP сервер накрылся: http: Server closed
