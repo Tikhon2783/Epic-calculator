@@ -7,21 +7,21 @@ import (
 
 // Переменные для работы Postgres
 const (
-  DBHost string = "127.0.0.1" // ip адресс 
-	DBPort uint16 = 5432				// Порт Postgres
+  DBHost string = "127.0.0.1"       // ip адресс 
+	DBPort uint16 = 5432              // Порт Postgres
 	DBUsername string = "postgres"		// Имя пользователя
-	DBPassword string = ""      // Пароль (если есть)
+	DBPassword string = ""            // Пароль (если есть)
 	DBName string = "calc_2_database" // Имя БД
 	DBNameDefault string = "postgres"	// Стандартное имя БД
 )
 
 // Дефолтные временнЫе переменные
 const (
-  T_sum	time.Duration = time.Millisecond * 500 // Время на выполнение сложения
-	T_sub	time.Duration = time.Millisecond * 500 // Время на выполнение вычитания
-	T_mult	time.Duration = time.Millisecond * 500 // Время на выполнение умножения
-	T_div	time.Duration = time.Millisecond * 500 // Время на выполнение деления
-	T_agentTimeout time.Duration = time.Second * 5 // Таймаут для агентов
+  T_sum	time.Duration = time.Millisecond * 500  // Время на выполнение сложения
+	T_sub	time.Duration = time.Millisecond * 500  // Время на выполнение вычитания
+	T_mult	time.Duration = time.Millisecond * 500  // Время на выполнение умножения
+	T_div	time.Duration = time.Millisecond * 500  // Время на выполнение деления
+	T_agentTimeout time.Duration = time.Second * 5  // Таймаут для агентов
 )
 
 // Переменные для работы логгера
