@@ -1,0 +1,21 @@
+{{template "base" .}}
+ 
+{{define "title"}}Monitor page{{end}}
+ 
+{{define "main"}}
+<h2>Мониторинг</h2>
+<table id=monitor-table>
+    <tr>
+        <th>Агент</th>
+        <th>Состояние</th>
+    <tr>
+    {{ range . }}
+    <tr>
+        <td>{{ .Agent }}</td>
+        <td>{{ .Status }}</td>
+    </tr>
+    {{ end }}
+</table>
+{{end}}
+
+{{define "custom"}}{{end}}
