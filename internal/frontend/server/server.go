@@ -54,7 +54,10 @@ func LaunchServer() (chan os.Signal, chan os.Signal) {
 	// Регистрация пользователя
 	mux.HandleFunc("/calculator/internal/register", handlers.RegisterHandlerInternal)
 	// Выход из аккаунта
-	mux.HandleFunc("/calculator/internal/logout", handlers.LogOutHandlerInternal)
+	mux.Handle(
+		"/calculator/internal/logout",
+		middlewares.InternalAuthorizationMiddleware(http.HandlerFunc(handlers.LogOutHandlerInternal)),
+	)
 
 	// Внешние endpoint-ы
 	mux.HandleFunc("/calculator/home", handlers.HomeHandler)

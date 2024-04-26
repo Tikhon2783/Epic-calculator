@@ -174,20 +174,22 @@
                 logoutButton.addEventListener('click', function() {
                     // Perform logout functionality here (e.g., clearing session, redirecting, etc.)
                     sessionStorage.removeItem('loggedInUser');
+                    fetch('/calculator/internal/logout')
+                    .catch(error => console.error('Error:', error));
                     logoutButton.style.display = 'none';
                     profileUsername.textContent = 'Log in';
                     profileUsername.addEventListener('click', function() {
-                        location.replace("../calculator/auth")
+                        location.replace("/calculator/auth")
                     });
                     alert('Logged out.');
                 });
             });
         } else {
             // Simulate login process (you should replace this with actual login functionality)
-            profileUsername.textContent = "Sign In";
+            profileUsername.textContent = "Log In";
         
             profileUsername.addEventListener('click', function() {
-                location.replace("../calculator/auth")
+                location.replace("/calculator/auth")
             });
         }
     });

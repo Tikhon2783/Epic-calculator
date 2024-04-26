@@ -179,3 +179,58 @@
 
 НОВАЯ СЕССИЯ
 02:08:32 server.go:95: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+19:48:26 startup.go:172: dial tcp 127.0.0.1:5432: connectex: No connection could be made because the target machine actively refused it.
+
+НОВАЯ СЕССИЯ
+20:37:43 server.go:95: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+20:38:06 external.go:246: Сервер: непредвиденная ПАНИКА при получении параметров: runtime error: invalid memory address or nil pointer dereference
+20:39:15 middlewares.go:163: Ошибка проверки jwt токена: token is malformed: token contains an invalid number of segments
+20:39:20 middlewares.go:163: Ошибка проверки jwt токена: token is malformed: token contains an invalid number of segments
+20:40:35 middlewares.go:108: Ошибка с проверкой выражения парсингом: strconv.ParseFloat: parsing "qwert": invalid syntax
+20:41:27 middlewares.go:108: Ошибка с проверкой выражения парсингом: strconv.ParseFloat: parsing "qwert": invalid syntax
+20:42:19 middlewares.go:108: Ошибка с проверкой выражения парсингом: strconv.ParseFloat: parsing "qwert": invalid syntax
+20:45:03 server.go:95: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+20:54:21 internal.go:758: Ошибка получения имени пользователя из контекста: <nil>
+20:55:24 server.go:95: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+21:07:43 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "(") (SQLSTATE 42601) на summation в БД: 500ms
+21:07:43 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "(") (SQLSTATE 42601) на substraction в БД: 500ms
+21:07:43 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "(") (SQLSTATE 42601) на multiplication в БД: 500ms
+21:07:43 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "(") (SQLSTATE 42601) на division в БД: 15s
+21:07:43 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesInternal (internal.go:359)
+21:09:48 server.go:98: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+21:10:13 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "=") (SQLSTATE 42601) на summation в БД: 500ms
+21:10:13 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "=") (SQLSTATE 42601) на substraction в БД: 500ms
+21:10:13 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "=") (SQLSTATE 42601) на multiplication в БД: 500ms
+21:10:13 internal.go:314: Оркестратор: ошибка изменения значения ОШИБКА: ошибка синтаксиса (примерное положение: "=") (SQLSTATE 42601) на division в БД: 20s
+21:10:13 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesInternal (internal.go:359)
+21:12:38 server.go:98: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+21:13:49 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesInternal (internal.go:359)
+21:16:39 server.go:98: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+21:17:10 external.go:246: Сервер: непредвиденная ПАНИКА при получении параметров: runtime error: invalid memory address or nil pointer dereference
+21:17:44 server.go:98: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+21:29:58 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesHandlerExternal (external.go:300)
+21:30:05 server.go:98: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+21:40:15 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesHandlerExternal (external.go:300)
+21:41:34 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesHandlerExternal (external.go:300)
+21:41:52 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesHandlerExternal (external.go:300)
+21:42:42 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesHandlerExternal (external.go:300)
+21:43:58 internal.go:285: Сервер: ошибка парсинга (0s): time: invalid duration "-hufds"
+21:59:58 server.go:98: HTTP сервер накрылся: http: Server closed

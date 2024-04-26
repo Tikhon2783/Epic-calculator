@@ -8,16 +8,16 @@
     <label for="summation">Сложение:</label>
     <input type="text" id="summation" name="summation" placeholder={{ .SumDefault }} value={{ .SumDefault }}><br><br>
 
-    <label for="summation">Вычитание:</label>
+    <label for="substraction">Вычитание:</label>
     <input type="text" id="substraction" name="substraction" placeholder={{ .SubDefault }} value={{ .SubDefault }}><br><br>
 
-    <label for="summation">Умножение:</label>
+    <label for="summamultiplicationtion">Умножение:</label>
     <input type="text" id="multiplication" name="multiplication" placeholder={{ .MulDefault }} value={{ .MulDefault }}><br><br>
 
-    <label for="summation">Деление:</label>
+    <label for="division">Деление:</label>
     <input type="text" id="division" name="division" placeholder={{ .DivDefault }} value={{ .DivDefault }}><br><br>
 
-    <label for="summation">Таймаут:</label>
+    <label for="timeoutAgent">Таймаут:</label>
     <input type="text" id="timeoutAgent" name="timeoutAgent" placeholder={{ .TimeoutDefault }} value={{ .TimeoutDefault }} {{ .AgentPerms }}><br><br>
 
     <button type="submit" id="sendVals-btn" onclick="submitValsForm(event)">Сохранить</button>
@@ -30,13 +30,23 @@ function submitValsForm(event) {
 
     console.log('sending vals request...');
 
-    const exp = document.getElementById('expression').value;
-
     const formData = new URLSearchParams();
-    formData.append('expression', exp);
-    console.log('exp', exp, 'data', formData)
 
-    fetch('/calculator/internal/sendexpression', {
+    const sum = document.getElementById('summation').value;
+    formData.append('sum', sum);
+    const sub = document.getElementById('substraction').value;
+    formData.append('sub', sub);
+    const mult = document.getElementById('multiplication').value;
+    formData.append('mult', mult);
+    const div = document.getElementById('division').value;
+    formData.append('div', div);
+    const tm = document.getElementById('timeoutAgent').value;
+    formData.append('timeout', tm);
+
+
+    console.log(formData)
+
+    fetch('/calculator/internal/values', {
         method: 'POST',
         body: formData
     })
@@ -44,13 +54,12 @@ function submitValsForm(event) {
         if(response.ok) {
             console.log('Request successful');
             alert('Выражение отправлено');
+        } else if (response.status === 401) {
+            alert('Время действия токена авторизации истекло. Войдите в аккаунт заново.');
         } else {
             console.error('Request failed');
-            alert('Ошибка, code', response.status)
+            alert('Ошибка, code', response.status);
         }
-    })
-    .then(data => {
-        alert(data);
     })
     .catch(error => console.error('Error:', error));
 }

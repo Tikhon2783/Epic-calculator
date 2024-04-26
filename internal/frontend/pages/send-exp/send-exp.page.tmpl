@@ -80,9 +80,13 @@ function submitSendForm(event) {
         if(response.ok) {
             console.log('Request successful');
             alert('Выражение отправлено');
+        } else if (response.status == 400) {
+            alert('Выражение невалидно')
+        } else if (response.status === 401) {
+            alert('Время действия токена авторизации истекло. Войдите в аккаунт заново.');
         } else {
             console.error('Request failed');
-            alert('Ошибка, code', response.status)
+            alert('Ошибка, code ' + response.status)
         }
     })
     .then(data => {

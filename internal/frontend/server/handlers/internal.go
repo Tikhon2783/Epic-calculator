@@ -303,7 +303,7 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 			u := strings.ReplaceAll(username, " ", "")
 			// Обновляем значение в БД
 			_, err = db.Exec(
-				fmt.Sprintf("UPDATE %s.time_vars (", u)+
+				fmt.Sprintf("UPDATE %s.time_vars\n", u)+
 					`SET time = $2
 					WHERE action = $1`,
 				[]string{"summation", "substraction", "multiplication", "division"}[i],
@@ -356,7 +356,6 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(times); err != nil {
 		http.Error(w, "Error encoding default data", http.StatusInternalServerError)
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 // Хендлер на endpoint убийства агента
@@ -529,7 +528,6 @@ func KillOrchestratorHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Println("Оркестратор должен быть отключен, возвращаем код 200.")
-	w.WriteHeader(200)
 }
 
 // // Хендлер на endpoint мониторинга агентов
@@ -597,7 +595,7 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 
 	username := r.Form.Get("username")
 	password := r.Form.Get("password")
-	logger.Printf("username '%s', password '%s'", username, password)
+	logger.Printf("register- username '%s', password '%s'", username, password)
 
 	// Проверяем, существует ли уже пользователь с таким именем
 	var exists bool
@@ -670,7 +668,6 @@ func RegisterHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Printf("Создали таблицу с переменными для пользователя '%s'.", username)
 	logger.Println("Пользователь зарегистрирован, производим процесс входа...")
-	w.WriteHeader(200)
 }
 
 // Хендлер на endpoint входа
@@ -702,6 +699,7 @@ func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
 
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
+	logger.Printf("log in- username '%s', password '%s'", username, password)
 
 	// Проверяем, существует ли пользователь с таким именем
 	var exists bool
@@ -746,13 +744,23 @@ func LogInHandlerInternal(w http.ResponseWriter, r *http.Request) {
 	logger.Println(cookie.Valid(), cookie.Value)
 	http.SetCookie(w, cookie)
 	logger.Println("Записали jwt токен в cookie.")
-	w.WriteHeader(200)
 }
 
 // Хендлер на endpoint выхода из аккаунта
 func LogOutHandlerInternal(w http.ResponseWriter, r *http.Request) {
+	// получаем имя пользователя из контекста запроса
+	v, ok := middlewares.FromContext(r.Context())
+	if !ok {
+		loggerErr.Println("Ошибка получения имени пользователя из контекста:", err)
+		logger.Println("Внутренняя ошибка контекста, запрос не обрабатывается.")
+		http.Error(w, "ошибка авторизации", http.StatusInternalServerError)
+		return
+	}
+	username := v.Username
+	logger.Printf("Сервер получил запрос на выход пользователя %s из аккаунта.\nСбрасываем cookie с токеном.", username)
 	http.SetCookie(w, &http.Cookie{
 		Name:    "token",
-		Expires: time.Now(),
+		Expires: time.Now().Add(time.Millisecond),
+		Value: "",
 	})
 }

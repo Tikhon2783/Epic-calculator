@@ -53,7 +53,7 @@ function submitRegForm(event) {
                     sessionStorage.setItem("loggedInUser", username)
                 } else {
                     console.error('Request failed');
-                    alert('Ошибка');
+                    alert('Ошибка входа: ' + response.status);
                 }
             })
             .catch(error => console.error('Error:', error));
@@ -61,7 +61,7 @@ function submitRegForm(event) {
             if(response.status === 409) {
                 alert('Пользователь с таким именем уже существует')
             } else {
-                alert('Ошибка, code', response.status)
+                alert('Ошибка, code ', + response.status)
             }
         }
     })
@@ -95,6 +95,9 @@ function submitLogForm(event) {
             console.log('Request successful');
             alert('Успешно вошли в аккаунт =D');
             sessionStorage.setItem("loggedInUser", username)
+        } else if (response.status === 401) {
+            console.log('Request semi-successful');
+            alert('Неверные данные для входа');
         } else {
             console.error('Request failed');
             alert('Ошибка');

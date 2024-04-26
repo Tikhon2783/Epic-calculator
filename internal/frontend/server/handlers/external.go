@@ -14,6 +14,9 @@ import (
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
+	// pb "calculator/internal/proto"
+	// "google.golang.org/grpc"
+	// "google.golang.org/grpc/credentials/insecure" // для упрощения не будем использовать SSL/TLS аутентификация
 )
 
 type expData struct {
@@ -245,6 +248,7 @@ func TimeValuesHandlerExternal(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	logger.Println("Сервер получил запрос на страницу параметров.")
+	db = shared.GetDb()
 	
 	// Проверяем пользователя на наличие прав изменения таймаута
 	v, ok := middlewares.FromContext(r.Context())
@@ -267,14 +271,13 @@ func TimeValuesHandlerExternal(w http.ResponseWriter, r *http.Request) {
 	// Получаем значения и возвращаем
 	t := orchestrator.GetTimes(username)
 	data := valsData{
-		SumDefault: t.Sum.String(),
+		SumDefault: t.Sum.String(),  
 		SubDefault: t.Sub.String(),
 		MulDefault: t.Mult.String(),
 		DivDefault: t.Div.String(),
 		TimeoutDefault: t.AgentTimeout.String(),
 		AgentPerms: map[bool]string{true: "", false: "readonly"}[perms],
 	}
-	w.WriteHeader(http.StatusOK)
 
 
 	files := []string{
@@ -298,6 +301,17 @@ func TimeValuesHandlerExternal(w http.ResponseWriter, r *http.Request) {
 }
 
 func MonitorHandlerExternal(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+			loggerErr.Println("Сервер: непредвиденная ПАНИКА при получении данных мониторинга:", rec)
+			http.Error(w, "На сервере что-то сломалось", http.StatusInternalServerError)
+		}
+	}()
+	logger.Println("Сервер получил запрос на страницу мониторинга.")
+
+
+
 	files := []string{
 		"internal/frontend/pages/monitor/monitor.page.tmpl",
 		"internal/frontend/pages/base.layout.tmpl",
