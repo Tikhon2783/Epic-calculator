@@ -170,10 +170,30 @@ func (m *AgentsManager) Monitor() [][]int32 {
 		agentStatus := m.Agents[i]
 		if agentStatus != 0 {
 			if time.Since(m.HbTime[i]) > m.HbTimeout[i] { // Агент не посылал хартбиты слишком долго
+				// Записываем агента как мертвого
 				loggerHB.Println(time.Since(m.HbTime[i]), m.HbTime[i], m.HbTimeout[i])
 				loggerHB.Printf("Оркестратор - агент %v умер (таймаут).\n", i)
 				m.Agents[i] = 0
 				agents = append(agents, []int32{int32(i), int32(0)})
+
+				// Возвращаем выражение которое он считал, в очередь
+				var exists bool
+				// Проверяем, было ли назначено умершему агенту какое-то выражение
+				err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM requests WHERE calculated = FALSE AND agent_proccess=$1)", i).Scan(&exists)
+				if err != nil {
+					loggerErr.Println("Ошибка поиска выражения, которое считал умерший агент-\nЕсли оно было, оно не будет посчитано до перезапуска оркестратора:", err)
+					continue
+				}
+				// Если было — возвращаем в очередь
+				if exists {
+					var id, exp string
+					err = db.QueryRow("SELECT id, expression FROM requests WHERE calculated = FALSE AND agent_proccess=$1)", i).Scan(&id, exp)
+				if err != nil {
+					loggerErr.Println("Ошибка получения выражения, которое считал умерший агент-\nОно не будет посчитано до перезапуска оркестратора:", err)
+					continue
+				}
+				m.HandleExpression(id, exp)
+				}
 			} else {
 				agents = append(agents, []int32{int32(i), int32(agentStatus)})
 				n++

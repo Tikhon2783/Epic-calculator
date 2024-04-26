@@ -122,7 +122,7 @@ func GetDebugLogger() *log.Logger {
 			f = nil
 		}
 		OpenFiles = append(OpenFiles, f)
-		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsDebug)
+		return log.New(io.MultiWriter(os.Stdout, f), "DEBUG ", vars.LoggerFlagsDebug)
 	}
 	return log.Default()
 }
@@ -146,7 +146,7 @@ func GetHeartbeatLogger() *log.Logger {
 			f = nil
 		}
 		OpenFiles = append(OpenFiles, f)
-		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsPings)
+		return log.New(io.MultiWriter(os.Stdout, f), "PULSE ", vars.LoggerFlagsPings)
 	}
 	return log.Default()
 }
@@ -162,7 +162,7 @@ func GetQueueLogger() *log.Logger {
 			f = nil
 		}
 		OpenFiles = append(OpenFiles, f)
-		return log.New(f, "PULSE ", vars.LoggerFlagsQueue)
+		return log.New(f, "QUEUE ", vars.LoggerFlagsQueue)
 	case 2:
 		f, err := os.Create("internal/logs/queue.txt")
 		if err != nil {
@@ -170,7 +170,7 @@ func GetQueueLogger() *log.Logger {
 			f = nil
 		}
 		OpenFiles = append(OpenFiles, f)
-		return log.New(io.MultiWriter(os.Stdout, f), "", vars.LoggerFlagsQueue)
+		return log.New(io.MultiWriter(os.Stdout, f), "QUEUE ", vars.LoggerFlagsQueue)
 	}
 	return log.Default()
 }

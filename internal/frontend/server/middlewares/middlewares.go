@@ -2,7 +2,6 @@ package middlewares
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -184,7 +183,6 @@ func InternalAuthorizationMiddleware(next http.Handler) http.Handler {
 			}
 		}()
 
-		fmt.Println(1)
 		logger.Println("Получили запрос на внутренний обработчик, проверяем токен...")
 
 		// Получаем jwt токен из cookie файлов

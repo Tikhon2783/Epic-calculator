@@ -278,7 +278,6 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 			if val == "" { // Не получили запрос на изменение данной переменной
 				continue
 			}
-			fmt.Printf("'%s'\n", val)
 			t, err := time.ParseDuration(val)
 			if err != nil {
 				logger.Println("Сервер: ошибка парсинга времени")
@@ -321,7 +320,6 @@ func TimeValuesInternal(w http.ResponseWriter, r *http.Request) {
 		}
 		// Таймаут
 		if tAgent != "" {
-			fmt.Printf("'%s'\n", tAgent)
 			t, err := time.ParseDuration(tAgent)
 			if err != nil {
 				logger.Println("Сервер: ошибка парсинга времени")

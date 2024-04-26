@@ -24,13 +24,14 @@ import (
 )
 
 var (
-	ServerExitChannel chan os.Signal = make(chan os.Signal, 1)
-	db                *pgx.ConnPool  = shared.GetDb()
-	err               error
-	logger            *log.Logger = shared.Logger
-	loggerErr         *log.Logger = shared.LoggerErr
-	Srv               *http.Server
-	Manager           *monitoring.AgentsManager
+	ServerExitChannel	chan os.Signal = make(chan os.Signal, 1)
+	db					*pgx.ConnPool  = shared.GetDb()
+	err					error
+	logger				*log.Logger = shared.Logger
+	loggerErr			*log.Logger = shared.LoggerErr
+	LoggerQueue			*log.Logger = shared.LoggerQueue
+	Srv					*http.Server
+	Manager				*monitoring.AgentsManager
 	OrchestratorServiceServer *Server
 )
 
@@ -48,6 +49,16 @@ func Launch(manager *monitoring.AgentsManager) {
 	fmt.Println("Оркестратор передаёт привет :)")
 	db = shared.GetDb()
 	Manager = manager
+	// Запускаем автоматическую периодическую проверку на то, какие агенты живые раз в секунду
+	// (Брать интервал, совпадающий с таймаутом агента нет смысла, так как для каждого агента
+	// может быть свой таймаут, отличающийся от других, а внутри функции мониторинга
+	// каждый агент будет проверяться в соответсвии с его таймаутом)
+	go func(){
+		for {
+			manager.Monitor()
+			<-time.After(1 * time.Second)
+		}
+	}()
 
 	// Подготавливаем запросы в БД
 	_, err = db.Prepare( // Запись выражения в таблицу с выражениями
@@ -139,6 +150,8 @@ func Launch(manager *monitoring.AgentsManager) {
 	}
 }
 
+// Ниже gRPC методы
+
 func (s *Server) SendExp(ctx context.Context, req *pb.ExpSendRequest) (*pb.AgentAndErrorResponse, error) {
 	id := req.Id
 	exp := req.Expression
@@ -226,9 +239,11 @@ func (s *Server) SeekForExp(ctx context.Context, in *pb.ExpSeekRequest) (*pb.Exp
 	Manager.RegisterHeartbeat(int(in.AgentID))
 	id, exp, username, ok := Manager.GiveExpression()
 	if !ok {
+		LoggerQueue.Printf("Оркестратор - агенту %d - пустая очередь.\n", in.AgentID)
 		return &pb.ExpSeekResponse{Found: false}, nil
 	}
 	t := GetTimes(username)
+	LoggerQueue.Printf("Оркестратор - агенту %d - выражение с id %s.\n", in.AgentID, id)
 	return &pb.ExpSeekResponse{
 		Found: true,
 		Expression: exp,

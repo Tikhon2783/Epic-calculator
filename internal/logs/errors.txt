@@ -234,3 +234,6 @@
 21:42:42 server.go:3411: http: superfluous response.WriteHeader call from calculator/internal/frontend/server/handlers.TimeValuesHandlerExternal (external.go:300)
 21:43:58 internal.go:285: Сервер: ошибка парсинга (0s): time: invalid duration "-hufds"
 21:59:58 server.go:98: HTTP сервер накрылся: http: Server closed
+
+НОВАЯ СЕССИЯ
+22:42:09 server.go:98: HTTP сервер накрылся: http: Server closed

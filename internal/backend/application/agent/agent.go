@@ -27,6 +27,7 @@ var (
 	logger    *log.Logger = shared.Logger
 	loggerErr *log.Logger = shared.LoggerErr
 	loggerHB  *log.Logger = shared.LoggerHeartbeats
+	LoggerQueue	*log.Logger = shared.LoggerQueue
 	Server    *http.Server
 	pulse     *time.Ticker
 )
@@ -91,9 +92,9 @@ func Agent(a *AgentComm) {
 		for {
 			select {
 			case <-pulse.C: // Пора посылать хартбит
-				loggerHB.Printf("Агент %v - отправляем...\n", a.N)
+				loggerHB.Printf("Агент %v - отправляет...\n", a.N)
 				resp, err := grpcClient.SendHeartbeat(context.TODO(), &pb.HeartbeatRequest{AgentID: int32(a.N)})
-				loggerHB.Printf("Агент %v - отправили.\n", a.N)
+				loggerHB.Printf("Агент %v - отправил.\n", a.N)
 				if err != nil {
 					loggerErr.Panic("Ошибка отправки хартбита:", err)
 				}
@@ -148,13 +149,15 @@ func Agent(a *AgentComm) {
 			case <-deathChannel: // Смерть агента
 				logger.Printf("Агент %v умирает...\n", a.N)
 				return
-			default: // Посылаем оркестратору запросы, чтобы получить выражение раз в секунду
+			default: // Посылаем оркестратору запросы, чтобы получить выражение, раз в секунду
 				for {
+					LoggerQueue.Printf("Агент %v - ищет...\n", a.N)
 					resp, err := grpcClient.SeekForExp(context.TODO(), &pb.ExpSeekRequest{AgentID: int32(a.N)})
 					if err != nil {
 						loggerErr.Panic("Ошибка отправки запроса на получение выражения:", err)
 					}
 					if resp.Found {
+						LoggerQueue.Printf("Агент %v - нашел.\n", a.N)
 						times.Sum = time.Duration(resp.Times.Summation)
 						times.Sub = time.Duration(resp.Times.Substraction)
 						times.Mult = time.Duration(resp.Times.Multiplication)
@@ -162,6 +165,7 @@ func Agent(a *AgentComm) {
 						taskId = resp.ExpressionID
 						task = resp.Expression
 						
+						LoggerQueue.Printf("Агент %v - подтверждает...\n", a.N)
 						respNew, err := grpcClient.ConfirmTakeExp(context.TODO(), &pb.ExpConfirmRequest{
 							AgentID: int32(a.N),
 							ExpressionID: taskId,
@@ -170,10 +174,14 @@ func Agent(a *AgentComm) {
 							loggerErr.Panic("Ошибка отправки запроса на получение выражения:", err)
 						}
 						if respNew.Error == "not in queue" { // Выражение уже взял другой агент
+							LoggerQueue.Printf("Агент %v - опоздал.\n", a.N)
 							continue
 						}
 
+						LoggerQueue.Printf("Агент %v - подтвердил.\n", a.N)
 						break
+					} else {
+						LoggerQueue.Printf("Агент %v - не нашел.\n", a.N)
 					}
 					time.Sleep(1 * time.Second)
 				}
