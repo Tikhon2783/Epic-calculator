@@ -87,6 +87,8 @@ func completeShutDown(dbInfo shared.Db_info) {
 		dbInfo.T_requests = false
 		dbInfo.T_agent = false
 		dbInfo.T_vars = false
+		dbInfo.T_timeout = false
+		dbInfo.T_users = false
 		logger.Printf("Удалили базу %s.", vars.DBNameDefault)
 	}
 
