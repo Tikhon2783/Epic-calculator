@@ -3,10 +3,12 @@ package myErrors
 import "errors"
 
 var (
-	FrontSrvErrors = frontSrvErrors{
+	StorageErrors = storageErrors{
 		InternalDbKeyCheckError: errors.New("ошибка проверки ключа в базе данных"),
 		InexistantIDError: errors.New("выражение с полученным ID не найдено"),
 		InternalDbKeyGetError: errors.New("ошибка получения выражения по ключу из базы данных"),
+      AlreadyUsedName: errors.New("имя пользователя уже занято"),
+      IllegalName: errors.New("недопустимое имя пользователя"),
 	}
 	JWTErrors = jwtErros{
 		InvalidTokenErr: errors.New("неверный токен"),
@@ -14,10 +16,14 @@ var (
 	}
 )
 
-type frontSrvErrors struct {
-	InternalDbKeyCheckError error
+type frontSrvErrors struct {}
+
+type storageErrors struct {
+   InternalDbKeyCheckError error
 	InexistantIDError error
 	InternalDbKeyGetError error
+   AlreadyUsedName error
+   IllegalName error
 }
 
 type jwtErros struct {

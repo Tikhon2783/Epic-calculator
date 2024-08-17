@@ -190,7 +190,7 @@ func InternalAuthorizationMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			if err == http.ErrNoCookie {
 				// Токена нет, перенаправляем пользователя на страницу входа
-				logger.Println("Сервер: пользователь неавторизирован, возвращаем ошибку 401.")
+				logger.Println("Сервер: пользователь неавторизирован, возвращаем код 401.")
 				http.Error(w, "пользователь неавторизирован", http.StatusUnauthorized)
 			} else {
 				logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
@@ -205,9 +205,9 @@ func InternalAuthorizationMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			if err == myErrors.JWTErrors.InvalidTokenErr {
 				// Токен неверный, перенаправляем пользователя на страницу входа
-				logger.Println("Сервер: неверный токен, возвращаем ошибку 401.")
+				logger.Println("Сервер: неверный токен, возвращаем код 401.")
 				http.Error(w, "пользователь неавторизирован", http.StatusUnauthorized)
-			} else if err == myErrors.JWTErrors.UnknownErr {
+			} else {
 				logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
 				loggerErr.Println("Ошибка проверки jwt токена:", err)
 				http.Error(w, "ошибка проверки jwt токена", http.StatusBadRequest)

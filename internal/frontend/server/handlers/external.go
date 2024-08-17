@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"calculator/internal"
+	"calculator/internal/config"
 	"calculator/internal/jwt-stuff"
 	"calculator/internal/frontend/server/middlewares"
 	"calculator/internal/backend/application/orchestrator"
@@ -14,9 +15,9 @@ import (
 	"github.com/jackc/pgx"
 	_ "github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // Standard library bindings for pgx
-	// pb "calculator/internal/proto"
-	// "google.golang.org/grpc"
-	// "google.golang.org/grpc/credentials/insecure" // для упрощения не будем использовать SSL/TLS аутентификация
+	pb "calculator/internal/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure" // для упрощения не будем использовать SSL/TLS аутентификация
 )
 
 type expData struct {
@@ -310,6 +311,36 @@ func MonitorHandlerExternal(w http.ResponseWriter, r *http.Request) {
 	}()
 	logger.Println("Сервер получил запрос на страницу мониторинга.")
 
+	// Отправляем запрос оркестратору
+	host := "localhost"
+	port := vars.PortGrpc
+	addr := fmt.Sprintf("%s:%s", host, port) // используем адрес сервера
+	// установим соединение
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: не получилось подключиться к серверу gRPC: ", err)
+		http.Error(w, "ошибка подключения к gRPC", http.StatusInternalServerError)
+		return
+	}
+
+	defer func() {
+		if err = conn.Close(); err != nil {
+			loggerErr.Println("Сервер: ошибка закрытия соединения:", err)
+		}
+	}()
+
+	grpcClient := pb.NewOrchestratorServiceClient(conn)
+	resp, err := grpcClient.Monitor(r.Context(), &pb.EmptyMessage{})
+	if err != nil {
+		logger.Println("Внутренняя ошибка, запрос не обрабатывается.")
+		loggerErr.Println("Сервер: запрос оркестратору вернулся ошибкой: ", err)
+		http.Error(w, "ошибка запроса оркестратору", http.StatusInternalServerError)
+		return
+	}
+
+	// TODO
+	_ = resp
 
 
 	files := []string{

@@ -152,7 +152,6 @@ func StartUp(logger *log.Logger, loggerErr *log.Logger, db_info shared.Db_info) 
 		if err != nil {
 			loggerErr.Fatal(err)
 		}
-		// Ping()
 		logger.Printf("Подключились к Postgres.\n")
 		// Создаем новую базу с данными (vars/variables.go - DBName)
 		_, err = dbc.Exec(fmt.Sprintf("CREATE DATABASE %s;", vars.DBName))

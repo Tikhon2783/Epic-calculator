@@ -15,23 +15,25 @@ const (
 	DBNameDefault string = "postgres"	// Стандартное имя БД
 )
 
-// Дефолтные временнЫе переменные
+// Дефолтные переменные времени и таймаутов
 const (
   T_sum	time.Duration = time.Millisecond * 500  // Время на выполнение сложения
 	T_sub	time.Duration = time.Millisecond * 500  // Время на выполнение вычитания
 	T_mult	time.Duration = time.Millisecond * 500  // Время на выполнение умножения
 	T_div	time.Duration = time.Millisecond * 500  // Время на выполнение деления
-	T_agentTimeout time.Duration = time.Second * 5  // Таймаут для агентов
+	T_agentTimeout time.Duration = time.Second * 5  // Таймаут для агентов (меньше секунды не выставлять!)
 )
 
 // Переменные для работы логгера
 const (
   LoggerFlagsDebug int = log.Lshortfile | log.Ltime	// Флаги обычного логгера
 	LoggerFlagsError int = log.Lshortfile | log.Ltime	// Флаги логгера ошибок
+  LoggerFlagsStor int = log.Lshortfile | log.Ltime	// Флаги логгера базы данных
 	LoggerFlagsPings int = log.Ltime                  // Флаги логгера хартбитов
   LoggerFlagsQueue int = log.Ltime                  // Флаги логгера обращений агентов к очереди выражений
 	LoggerOutputDebug int = 1		// Вывод обычного логгера (0: Stdout, 1: internal/logs/debug.txt, 2: Stdout + debug.txt)
 	LoggerOutputError int = 2		// Вывод логгера ошибок (0: Stderr, 1: internal/logs/errors.txt, 2: Stderr + errors.txt)
+  LoggerOutputStor int = 1		// Вывод логгера ошибок (0: Stderr, 1: internal/logs/storage.txt, 2: Stderr + storage.txt)
 	LoggerOutputPings int = 1		// Вывод логгера пингов (0: Stdout, 1: internal/logs/heartbeats.txt, 2: Stdout + heartbeats.txt)
   LoggerOutputQueue int = 1		// Вывод логгера очереди (0: Stdout, 1: internal/logs/queue.txt, 2: Stdout + queue.txt)
 )

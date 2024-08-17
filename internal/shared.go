@@ -15,13 +15,14 @@ import (
 )
 
 var (
-	Logger			 *log.Logger = GetDebugLogger()
-	LoggerErr        *log.Logger = GetErrLogger()
-	LoggerHeartbeats *log.Logger = GetHeartbeatLogger()
-	LoggerQueue		 *log.Logger = GetQueueLogger()
-	db               *pgx.ConnPool
-	OpenFiles		 []*os.File = make([]*os.File, 0)
-	mu				 *sync.Mutex = &sync.Mutex{}
+	Logger				*log.Logger = GetDebugLogger()
+	LoggerErr			*log.Logger = GetErrLogger()
+	LoggerStorage			*log.Logger = GetStorageLogger()
+	LoggerHeartbeats		*log.Logger = GetHeartbeatLogger()
+	LoggerQueue			*log.Logger = GetQueueLogger()
+	db				*pgx.ConnPool
+	OpenFiles			[]*os.File = make([]*os.File, 0)
+	mu				*sync.Mutex = &sync.Mutex{}
 )
 
 type Db_info struct {
@@ -74,6 +75,33 @@ func autoFlushBuffer(writer *bufio.Writer) {
     }
 }
 
+func GetDebugLogger() *log.Logger {
+	switch vars.LoggerOutputDebug {
+	case 0:
+		return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
+	case 1:
+		f, err := os.OpenFile("internal/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Println(`Не смогли открыть файл для логгера дебага, логи записаны не будут.
+			Укажите Stdout в качестве вывода, чтобы выводить логи в консоль:`, err)
+			f = nil
+		}
+		OpenFiles = append(OpenFiles, f)
+		writer := bufio.NewWriter(f)
+		go autoFlushBuffer(writer)
+		return log.New(writer, "", vars.LoggerFlagsDebug)
+	case 2:
+		f, err := os.OpenFile("internal/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Println("Не смогли открыть файл для логгера дебага, будет использоваться только Stdout:", err)
+			f = nil
+		}
+		OpenFiles = append(OpenFiles, f)
+		return log.New(io.MultiWriter(os.Stdout, f), "DEBUG ", vars.LoggerFlagsDebug)
+	}
+	return log.Default()
+}
+
 func GetErrLogger() *log.Logger {
 	switch vars.LoggerOutputError {
 	case 0:
@@ -100,29 +128,26 @@ func GetErrLogger() *log.Logger {
 	return log.Default()
 }
 
-func GetDebugLogger() *log.Logger {
-	switch vars.LoggerOutputDebug {
+func GetStorageLogger() *log.Logger {
+	switch vars.LoggerOutputPings {
 	case 0:
-		return log.New(os.Stdout, "", vars.LoggerFlagsDebug)
+		return log.New(os.Stdout, "STORAGE ", vars.LoggerFlagsPings)
 	case 1:
-		f, err := os.OpenFile("internal/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-        if err != nil {
-            log.Println(`Не смогли открыть файл для логгера дебага, логи записаны не будут.
-			Укажите Stdout в качестве вывода, чтобы выводить логи в консоль:`, err)
-            f = nil
-        }
-        OpenFiles = append(OpenFiles, f)
-        writer := bufio.NewWriter(f)
-        go autoFlushBuffer(writer)
-        return log.New(writer, "", vars.LoggerFlagsDebug)
-	case 2:
-		f, err := os.OpenFile("internal/logs/debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		f, err := os.Create("internal/logs/storage.txt")
 		if err != nil {
-			log.Println("Не смогли открыть файл для логгера дебага, будет использоваться только Stdout:", err)
+			log.Println("Не смогли открыть файл для логгера хранилища, их логи записаны не будут:", err)
 			f = nil
 		}
 		OpenFiles = append(OpenFiles, f)
-		return log.New(io.MultiWriter(os.Stdout, f), "DEBUG ", vars.LoggerFlagsDebug)
+		return log.New(f, "STORAGR ", vars.LoggerFlagsPings)
+	case 2:
+		f, err := os.Create("internal/logs/storage.txt")
+		if err != nil {
+			log.Println("Не смогли открыть файл для логгера хранилища, будет использоваться только Stdout:", err)
+			f = nil
+		}
+		OpenFiles = append(OpenFiles, f)
+		return log.New(io.MultiWriter(os.Stdout, f), "STORAGE  ", vars.LoggerFlagsPings)
 	}
 	return log.Default()
 }
